@@ -1,0 +1,22 @@
+# R
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+*.Rproj
+
+# renv
+renv/library/
+renv/staging/
+renv/python/
+renv/sandbox/
+
+# rendered output (commit the final HTML/PDF you submit explicitly if needed)
+analysis/*.html
+analysis/*_cache/
+analysis/*_files/
+*.pdf
+
+# OS / editor
+.DS_Store
+Thumbs.db

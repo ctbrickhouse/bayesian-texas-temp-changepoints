@@ -1,0 +1,71 @@
+---
+title: "Bayesian Change-Point Analysis of Texas Summer Temperatures"
+subtitle: "STAT 638 Project 9 - Austin Camp Mabry, TX (1938-2026)"
+author: "Campbell Brickhouse, Shandon Bringhurst, Caleb Notheis"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output:
+  ioslides_presentation:
+    widescreen: true
+    smaller: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+library(here)
+library(dplyr)
+library(ggplot2)
+source(here("R", "clean_data.R"))
+source(here("R", "annual_summary.R"))
+
+clean  <- readr::read_csv(here("data", "processed", "data_cleaned.csv"), show_col_types = FALSE)
+annual <- compute_annual_summer_tmax(clean)
+```
+
+## Scientific Question and Data
+
+- Has average summer (Jun-Aug) daily max temperature at Austin Camp Mabry, TX changed over time?
+- Gradual trend vs. one or more abrupt change points?
+- Data: NOAA GHCN-D daily TMAX, station USW00013958, `r min(annual$year)`-`r max(annual$year)`
+- Outcome $Y(t)$: mean daily TMAX over Jun 1 - Aug 31 of year $t$, years with $\geq$ 90% of summer days present
+
+## Bayesian Model
+
+- *(state the likelihood for $Y(t)$ and how segment-specific means/slopes and change-point location(s) enter the model)*
+
+## Prior Distributions
+
+- *(state and justify priors for the mean/slope parameters and the change-point location)*
+
+## Posterior Computation and Diagnostics
+
+- *(MCMC method, chains/iterations, $\hat{R}$, effective sample size, trace plots)*
+
+## Bayesian Results
+
+```{r annual-trend-plot}
+ggplot(filter(annual, included), aes(year, mean_tmax_f)) +
+  geom_point() +
+  geom_smooth(method = "loess", se = TRUE) +
+  labs(x = "Year", y = "Mean summer TMAX (deg F)")
+```
+
+## Bayesian Results / Interpretation
+
+- *(posterior summary of change-point location and magnitude, credible intervals)*
+
+## Sensitivity Analysis and Model Checking
+
+- *(alternative priors / posterior predictive checks; are conclusions robust?)*
+
+## Alternative Analysis and Bayesian Comparison
+
+- *(frequentist change-point or trend test; how do estimates/uncertainty compare?)*
+
+## Innovation / Extension
+
+- Motivation $\rightarrow$ Extension $\rightarrow$ What we learned
+
+## Conclusions and Justification for the Bayesian Approach
+
+- Answer to the scientific question
+- Did the Bayesian approach offer a meaningful advantage over the alternative?

@@ -1,0 +1,40 @@
+Package: bayesian.tx.temp
+Type: Package
+Title: Bayesian Change-Point Analysis of Texas Summer Temperatures
+Version: 0.1.0
+Authors@R: c(
+    person("Campbell", "Brickhouse", email = "ctbrickhouse@tamu.edu", role = c("aut", "cre")),
+    person("Shandon", "Bringhurst", email = "shandonb@tamu.edu", role = "aut"),
+    person("Caleb", "Notheis", email = "Caleb.Notheis@tamu.edu", role = "aut")
+    )
+Description: Group project for TAMU STAT 638 (Applied Bayesian Analysis).
+    Investigates whether the average summer daily maximum temperature at
+    Austin Camp Mabry, TX (GHCND:USW00013958) has changed over time, and
+    whether the long-term pattern is better described by a gradual trend
+    or one or more abrupt change points, using Bayesian change-point
+    models compared against frequentist alternatives.
+License: MIT
+Encoding: UTF-8
+LazyData: false
+Depends: R (>= 4.2)
+Imports:
+    dplyr,
+    readr,
+    tidyr,
+    lubridate,
+    ggplot2,
+    here
+Suggests:
+    testthat (>= 3.0.0),
+    withr,
+    knitr,
+    rmarkdown,
+    mcp,
+    brms,
+    rstan,
+    bayesplot,
+    loo,
+    strucchange,
+    trend,
+    bcp
+Config/testthat/edition: 3
