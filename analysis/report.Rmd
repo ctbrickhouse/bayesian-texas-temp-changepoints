@@ -7,73 +7,521 @@ output:
     toc: true
     toc_float: true
     code_folding: hide
+bibliography: references.bib
+link-citations: true
 ---
 
 <!--
 Section word-count targets are from instructions.md. The main report is
-capped at 2,500 words excluding references, captions, supplementary
-material, and the AI Use Statement. Keep routine code collapsed (code_folding
-above) or move it to the Appendix so it doesn't count against the limit.
+capped at 2,500 words excluding references, figure/table captions,
+supplementary material, and the AI Use Statement. Keep routine code collapsed
+(code_folding above) or in the Appendix so it doesn't count against the limit.
+
+The slow computations live in scripts/ and save their results to
+analysis/results/. Run them in order before rendering:
+  scripts/00_data_cleaning_final.R    -> data/processed/data_cleaned_final.csv
+  scripts/01_conventional_analysis.R  -> analysis/results/conventional_results.rds
+  scripts/02_bayesian_analysis.R      -> analysis/results/bayesian_results.rds
+  scripts/03_bayesian_sensitivity.R   -> analysis/results/bayesian_sensitivity.rds
 -->
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+knitr::opts_chunk$set(message = FALSE, warning = FALSE, echo = FALSE)
 library(here)
 library(dplyr)
+library(tidyr)
 library(ggplot2)
-source(here("R", "clean_data.R"))
-source(here("R", "annual_summary.R"))
+library(knitr)
 
-clean  <- readr::read_csv(here("data", "processed", "data_cleaned.csv"), show_col_types = FALSE)
-annual <- compute_annual_summer_tmax(clean)
+res_dir <- here("analysis", "results")
+fig_dir <- file.path(res_dir, "figures")
+conv  <- readRDS(file.path(res_dir, "conventional_results.rds"))
+bayes <- readRDS(file.path(res_dir, "bayesian_results.rds"))
+sens  <- readRDS(file.path(res_dir, "bayesian_sensitivity.rds"))
+
+annual <- conv$annual
+st <- bayes$settings
+
+# small helpers for writing numbers in the text
+f1 <- function(x) sprintf("%.1f", x)
+f2 <- function(x) sprintf("%.2f", x)
+pct <- function(x) sprintf("%.0f%%", 100 * x)
+ci <- function(lo, hi, f = f1) paste0("(", f(lo), ", ", f(hi), ")")
+
+# one posterior summary row: model, quantity, region ("all", "early", "late")
+ps <- function(model, quantity, region = "all") {
+  tab <- if (region == "all") bayes$posterior_summary else bayes$posterior_by_region
+  tab[tab$model == model & tab$quantity == quantity & tab$region == region, ]
+}
+# "mean (95% CrI)" for a posterior quantity
+pci <- function(model, quantity, region = "all", f = f1) {
+  r <- ps(model, quantity, region)
+  paste0(f(r$mean), " ", ci(r$lower, r$upper, f))
+}
+pp <- function(i) bayes$post_probs$probability[i]
+ppl <- sens$ppc_pvalues
+
+w_b3 <- bayes$region_weights$B3
+w_b4 <- bayes$region_weights$B4
+loo_w <- bayes$loo_weights
+conv_m1 <- conv$trend_rate |> filter(fit == "M1 AR1")
+conv_m3 <- conv$estimates |> filter(fit == "M3 iid")
 ```
 
-## 1. Scientific Question and Data (200-250 words)
-
-*State the scientific question, data source, outcome, key predictors, sample size, and relevant features.*
+## 1. Scientific Question and Data
 
 ```{r data-overview}
-annual |>
-  summarise(
-    n_years = n(),
-    n_included = sum(included),
-    first_year = min(year),
-    last_year = max(year)
-  )
+n_years <- nrow(annual)
+hottest <- annual |> arrange(desc(y)) |> slice_head(n = 3)
 ```
 
-## 2. Bayesian Model (250-300 words)
+**Scientific question.** Has the average summer daily maximum temperature in
+Austin, Texas, changed since 1938? If so, is the change better described as a
+gradual trend or as an abrupt shift? If an abrupt shift is supported, when did
+it most likely occur, how large was it, and how uncertain are its timing and
+magnitude?
 
-*Specify the likelihood, parameters, and why the model fits the scientific question.*
+**Data.** We use daily maximum temperature (TMAX) from the NOAA Global
+Historical Climatology Network–Daily [GHCN-D, @menne2012ghcnd] for the Austin
+Camp Mabry station (GHCND:USW00013958), whose record begins in 1938. We kept
+June 1 through August 31 observations, dropped values that were missing,
+failed NOAA quality control or carried a measurement flag, and converted from
+tenths of a degree to °C.
 
-## 3. Prior Distributions (250-300 words)
+**Outcome.** For each year $t$, the outcome $Y_t$ is the mean daily maximum
+temperature over that summer. A year is included only if at least 90% of its
+92 summer days have a valid TMAX. Every summer from `r min(annual$year)` to
+`r max(annual$year)` is complete, giving $n =$ `r n_years` annual
+observations built from `r format(sum(annual$n_days), big.mark = ",")` daily
+records.
 
-*Specify and justify priors; state whether informative, weakly informative, or otherwise motivated.*
+**Predictors and features.** Calendar year is the only predictor; the
+quantities of interest are the timing and size of any change. $Y_t$ ranges
+from `r f1(min(annual$y))` °C to `r f1(max(annual$y))` °C (mean
+`r f1(mean(annual$y))` °C, SD `r f1(sd(annual$y))` °C). Figure 1 shows large
+year-to-year variability, and the three hottest summers
+(`r paste(sort(hottest$year), collapse = ", ")`) all fall in the most recent
+two decades, a pattern consistent with either a steady trend or a step change.
+Because consecutive summers may be correlated, we also consider serially
+correlated errors.
 
-## 4. Posterior Computation and Diagnostics (250-300 words)
+```{r fig-annual-series, fig.width=8, fig.height=3.5, fig.cap="**Figure 1.** Mean summer (June–August) daily maximum temperature at Austin Camp Mabry, 1938–2026. The grey line is a LOESS smoother shown for reference only."}
+ggplot(annual, aes(year, y)) +
+  geom_smooth(method = "loess", se = FALSE, colour = "grey60", linewidth = 0.7) +
+  geom_line(colour = "grey40", linewidth = 0.4) +
+  geom_point(colour = "#2a78d6", size = 1.6) +
+  labs(x = "Year", y = "Mean summer TMAX (°C)") +
+  theme_minimal(base_size = 12)
+```
 
-*Describe the posterior computation method and convergence/computational diagnostics.*
+## 2. Bayesian Model
 
-## 5. Posterior Results and Interpretation (350-400 words)
+Let $s_t = t - 1982$ (year centred at the middle of the record). For all
+models,
+$$Y_t \mid \mu_t, \sigma \;\overset{\text{ind}}{\sim}\; \mathcal N(\mu_t, \sigma^2), \qquad t = 1938, \dots, 2026,$$
+and the models differ only in the mean $\mu_t$:
 
-*Present posterior means/medians, credible intervals, posterior probabilities, or predictions, interpreted for the scientific question.*
+| Model | Mean $\mu_t$ | Description |
+|:--|:--|:--|
+| B0 | $\alpha$ | no change |
+| B1 | $\alpha + \beta s_t$ | linear trend |
+| B2 | $\alpha + \beta s_t + \kappa s_t^2$ | quadratic trend |
+| B3 | $\alpha + \beta s_t$ if $s_t < c$; $\;\alpha_2 + \beta (s_t - c)$ if $s_t \ge c$ | abrupt jump in level |
+| B4 | $\alpha + \beta \min(s_t, c) + \beta_2 \{\max(s_t, c) - c\}$ | change in slope (joined) |
+| B5 | $\alpha + \beta s_t$ if $s_t < c$; $\;\alpha_2 + \beta_2 (s_t - c)$ if $s_t \ge c$ | jump and slope change |
 
-## 6. Sensitivity Analysis and Model Checking (250-300 words)
+Here $\alpha$ is the mean summer TMAX in 1982 (on the first segment),
+$\beta$ the warming rate (°C/year) and $\sigma$ the year-to-year standard
+deviation. In the change-point models, $c$ is the change point, $\alpha_2$ is
+the mean level immediately after the change, and $\beta_2$ the slope after
+it. The jump size is the derived quantity
+$\Delta = \alpha_2 - (\alpha + \beta c)$. We report the timing as
+$\gamma = 1982 + \lceil c \rceil - 1$, the last summer before the change.
 
-*At least one sensitivity analysis on priors or modeling assumptions; posterior predictive or other model checks.*
+The six models answer the scientific question directly. B0 versus the others
+asks *whether* temperature changed. B1 and B2 describe *gradual* change. B3–B5
+describe an *abrupt* change whose timing $c$ is an unknown parameter with its
+own posterior distribution [@carlin1992changepoint]. They are, one for one,
+the Bayesian versions of the mean models M0–M5 of the conventional analysis
+(Section 7), so the two analyses can be compared parameter by parameter.
 
-## 7. Alternative Analysis, Comparison, and Bayesian Justification (400-450 words)
+We use independent normal errors. The conventional analysis found residual
+autocorrelation only in the models with no change point (Section 7). We check
+this assumption with AR(1) errors in Section 6.
 
-*Frequentist or other established alternative method; compare estimates, uncertainty, assumptions, predictions, interpretation, conclusions.*
+## 3. Prior Distributions
 
-## 8. Innovation or Extension (200-250 words)
+```{r prior-table}
+prior_tab <- tibble(
+  Parameter = c("$\\alpha$, $\\alpha_2$ (level, °C)", "$\\beta$, $\\beta_2$ (slope, °C/year)",
+                "$\\kappa$ (curvature)", "$\\sigma$ (°C)", "$c$ (change point)"),
+  Prior = c(sprintf("$\\mathcal N(%g, %g^2)$", st$prior_mean[["int_1"]], st$prior_sd[["int_1"]]),
+            sprintf("$\\mathcal N(0, %g^2)$", st$prior_sd[["s_1"]]),
+            sprintf("$\\mathcal N(0, %g^2)$", st$prior_sd[["s_1_E2"]]),
+            sprintf("Half-normal, scale %g", st$sigma_sd),
+            sprintf("Uniform(%g, %g), i.e. 1952–2012", st$cp_lower, st$cp_upper)),
+  Type = c("Weakly informative", "Weakly informative", "Weakly informative",
+           "Weakly informative", "Non-informative within a window")
+)
+kable(prior_tab, caption = "**Table 1.** Prior distributions (same priors for every model in which a parameter appears).")
+```
 
-*Motivation, extension, what was learned. Explicitly answer: why is the Bayesian approach justified here, and what does it provide beyond the alternative?*
+All priors are proper and **weakly informative**: they rule out physically
+absurd values but are wide compared with what the data say.
 
-## AI Use Statement (max 50 words)
+* **Levels.** Central Texas summer afternoons average about 35 °C, so we
+  centre $\alpha$ and $\alpha_2$ there. An SD of 3 °C gives 95% prior mass
+  between about 29 and 41 °C. That range covers every summer mean seen in
+  Texas and is about five times wider than the posterior turns out to be.
+* **Slopes.** An SD of 0.05 °C/year places 95% prior mass within ±1 °C per
+  decade. That is about five times the current global warming rate of
+  roughly 0.2 °C per decade [@ipcc2018spm]. The prior is centred at zero, so
+  it does not assume warming.
+* **Curvature.** $\kappa \sim \mathcal N(0, 0.002^2)$ allows the quadratic
+  term to bend the curve by up to about ±7 °C at the ends of the record.
+* **Error SD.** A half-normal with scale 2 °C keeps $\sigma$ positive. Its
+  median (1.3 °C) is close to the observed SD of $Y_t$, and it still allows
+  values up to about 4 °C.
+* **Change point.** A uniform prior on $c$ says every year is equally likely
+  a priori. We restrict it to 1952–2012, the same 15% trimming used in the
+  conventional sup-F test [@andrews1993tests]. A change in the first or last
+  14 summers could not be told apart from a few unusual years.
 
-*Which AI tools were used, how, and how the group verified AI-generated statistical/computational information.*
+A prior predictive check confirms these priors produce plausible data.
+Simulating whole series from the B3 prior gives 95% of summer means between
+`r f1(sens$prior_predictive$lower_2.5)` and
+`r f1(sens$prior_predictive$upper_97.5)` °C. Only
+`r pct(sens$prior_predictive$share_below_25 + sens$prior_predictive$share_above_45)`
+fall outside 25–45 °C. The observed values
+(`r f1(min(annual$y))`–`r f1(max(annual$y))` °C) sit well inside this range.
+Figure 6 compares prior and posterior for the key quantities. Section 6 shows
+that the estimated warming does not depend on these choices, but the
+relative weight of the two change-point modes does.
+
+## 4. Posterior Computation and Diagnostics
+
+The models were written with the **mcp** package [@lindelov2020mcp], which
+translates segment formulas into JAGS code [@plummer2003jags]. JAGS samples
+the posterior with Gibbs sampling (slice sampling for parameters without
+closed-form conditionals). Each model was run with
+`r st$mcmc$chains` chains of `r format(st$mcmc$iter, big.mark = ",")` draws
+after `r format(st$mcmc$adapt, big.mark = ",")` adaptation and burn-in
+iterations. Every chain had its own fixed random seed.
+
+**A multimodal posterior.** A first run of B3 started its chains at change
+points spread over the prior range. The chains' average change years were
+`r paste(round(bayes$naive_cp_by_chain), collapse = ", ")`. Each chain stays
+for long stretches in either the 1960s or the 2000s, and $\widehat R$ for $c$ was
+`r f2(bayes$naive_check$rhat[bayes$naive_check$variable == "cp_1"])`, far
+above 1.01. The posterior of the change point has **two separate modes**, and
+a Gibbs sampler cannot move between them. Taking the output of any single
+chain would have been badly misleading.
+
+**Remedy.** For a fixed $c$ and $\sigma$, every model is a normal linear
+regression with normal priors, so the regression coefficients can be
+integrated out exactly. That makes $p(c \mid y)$ computable on a fine grid
+(integrating $\sigma$ numerically). We used the grid to compute the
+posterior probability of each side of a split at 1987, between the two
+modes. We then ran mcp separately with $c$ restricted to each side and
+combined the two sets of draws in proportion to those probabilities. This is
+exact, because
+$p(\theta\mid y)=\sum_{r} P(r\mid y)\,p(\theta\mid y, r)$ over the two
+regions $r$.
+
+**Diagnostics.** Across all `r length(unique(bayes$convergence$run))` MCMC
+runs, the largest rank-normalized $\widehat R$ [@vehtari2021rhat] is
+`r sprintf("%.3f", max(bayes$convergence$rhat))`. The smallest bulk and tail
+effective sample sizes are
+`r format(round(min(bayes$convergence$ess_bulk)), big.mark = ",")` and
+`r format(round(min(bayes$convergence$ess_tail)), big.mark = ",")`. Trace
+plots (Figure 2) show well-mixed chains within each region.
+
+As an independent check, the MCMC change-year probabilities match the exact
+grid posterior almost perfectly (Figure 3); the region means agree to within
+`r f1(max(abs(bayes$mcmc_vs_grid$mcmc_mean - bayes$mcmc_vs_grid$grid_mean)))`
+years. We therefore trust the posterior summaries below.
+
+```{r fig-trace, out.width="85%", fig.cap="**Figure 2.** Trace plots for the jump model B3, run separately with the change point restricted to before 1987 (top) and after 1987 (bottom). Colours are the four chains."}
+include_graphics(file.path(fig_dir, "bayes_trace.png"))
+```
+
+```{r fig-grid, out.width="85%", fig.cap="**Figure 3.** Posterior probability of each change year from the combined MCMC draws (grey bars) and from exact numerical integration on a grid (orange points)."}
+include_graphics(file.path(fig_dir, "bayes_mcmc_vs_grid.png"))
+```
+
+## 5. Posterior Results and Interpretation
+
+```{r loo-table}
+loo_w |>
+  transmute(Model = model,
+            `elpd (LOO)` = sprintf("%.1f", elpd_loo),
+            `Difference from best (SE)` = ifelse(elpd_diff == 0, "0",
+                                                 sprintf("%.1f (%.1f)", elpd_diff, se_diff)),
+            `p_loo` = sprintf("%.1f", p_loo),
+            `Stacking weight` = sprintf("%.2f", stacking)) |>
+  kable(caption = "**Table 2.** Leave-one-out cross-validation (PSIS-LOO). Higher expected log predictive density (elpd) is better; stacking weights combine the models for prediction.")
+```
+
+**Did temperature change?** Yes. The no-change model B0 is worst by
+`r f1(-loo_w$elpd_diff[loo_w$model == "B0"])` elpd units (Table 2)
+[@vehtari2017loo]. Under the linear trend B1, the warming rate is
+`r pci("B1", "trend_decade", f = f2)` °C per decade, with $P(\beta > 0 \mid y)$
+`r ifelse(pp(1) > 0.999, "> 0.999", f2(pp(1)))`. Every model agrees on how
+much warming has accumulated. The posterior mean difference between 2026 and
+1938 is `r pci("B1", "total_warming")` °C under B1,
+`r pci("B3", "total_warming")` °C under B3 and
+`r pci("B4", "total_warming")` °C under B4.
+
+**Gradual or abrupt?** The data cannot tell. Models with curvature or a
+change point (B2–B5) beat the straight line B1 by about
+`r f1(loo_w$elpd_loo[loo_w$model == "B4"] - loo_w$elpd_loo[loo_w$model == "B1"])`
+elpd. Among themselves, though, they lie within about one standard error of
+each other. Stacking [@yao2018stacking] puts most weight on the gradual
+slope-change model B4 (`r f2(loo_w$stacking[loo_w$model == "B4"])`) and the
+rest on the jump model B3 (`r f2(loo_w$stacking[loo_w$model == "B3"])`).
+
+**When, and how large?** The jump model B3 has two explanations of almost
+equal posterior probability (Figures 4–6):
+
+* With probability `r f2(w_b3[["late"]])`, a **jump of
+  `r pci("B3", "jump", "late", f2)` °C** after
+  `r round(ps("B3", "cp_year", "late")$median)` on top of an essentially flat
+  trend (`r pci("B3", "trend_decade", "late", f2)` °C/decade).
+* With probability `r f2(w_b3[["early"]])`, a **drop of
+  `r f2(-ps("B3", "jump", "early")$mean)` °C** in the mid-1960s, after the
+  hot drought summers of the 1950s, followed by steady warming of
+  `r pci("B3", "trend_decade", "early", f2)` °C/decade.
+
+The gradual model B4 places the start of faster warming around
+`r round(ps("B4", "cp_year")$median)` (95% CrI
+`r ci(ps("B4", "cp_year")$lower, ps("B4", "cp_year")$upper, function(x) sprintf("%.0f", x))`).
+The rate increases by `r pci("B4", "slope_change_decade", f = f2)` °C/decade
+($P > 0 =$ `r f2(pp(8))`).
+
+**Prediction.** The posterior predictive distribution for summer 2027 has
+mean `r f1(bayes$pred_2027$mean[bayes$pred_2027$model == "B3"])` °C under B3
+(95% interval
+`r ci(bayes$pred_2027$lower[bayes$pred_2027$model == "B3"], bayes$pred_2027$upper[bayes$pred_2027$model == "B3"])`).
+The probability that 2027 exceeds 36 °C is
+`r f2(bayes$pred_2027$p_above_36[bayes$pred_2027$model == "B3"])`, compared
+with `r f2(bayes$pred_2027$p_above_36[bayes$pred_2027$model == "B1"])` under B1.
+
+**Answer.** Austin summers are about 2 °C hotter than in 1938, and this
+conclusion is robust. Whether the change came as one abrupt jump in 2007 or
+as gradual warming that accelerated after the 1970s is genuinely uncertain
+given 89 noisy summers. The timing of any single change point should not be
+over-interpreted.
+
+```{r fig-fits, out.width="90%", fig.cap="**Figure 4.** Posterior mean (lines) and 95% credible bands for the mean summer TMAX under the linear trend B1, the slope-change model B4, and the two modes of the jump model B3 (with their posterior probabilities)."}
+include_graphics(file.path(fig_dir, "bayes_fits.png"))
+```
+
+```{r fig-changeyear, out.width="85%", fig.cap="**Figure 5.** Distribution of the change year: conventional parametric bootstrap of $\\hat\\gamma$ for M3 (top) and Bayesian posteriors for B3 (middle) and B4 (bottom)."}
+include_graphics(file.path(fig_dir, "bayes_changeyear.png"))
+```
+
+```{r fig-prior-post, out.width="95%", fig.cap="**Figure 6.** Prior (grey) and posterior (orange) distributions for the jump model B3. The data move the change point, jump size and total warming far from their priors; the jump posterior is bimodal (a drop in the 1960s or a rise in 2007)."}
+include_graphics(file.path(fig_dir, "bayes_prior_posterior.png"))
+```
+
+## 6. Sensitivity Analysis and Model Checking
+
+```{r sens-table}
+sens$sensitivity |>
+  transmute(Variant = variant,
+            `P(change after 1987)` = f2(p_late),
+            `Jump if late (°C)` = paste(f2(jump_late), ci(jump_late_lower, jump_late_upper, f2)),
+            `Jump if early (°C)` = f2(jump_early),
+            `Total warming (°C)` = paste(f2(total_warming), ci(tw_lower, tw_upper, f2)),
+            `AR(1) ρ` = ifelse(is.na(rho), "–", paste(f2(rho), ci(rho_lower, rho_upper, f2)))) |>
+  kable(caption = "**Table 3.** Sensitivity of the jump model B3. Each row changes one assumption relative to the main analysis. Intervals are 95% credible intervals.")
+```
+
+**Priors and assumptions.** We refit B3 four more times (Table 3): with
+the change point allowed anywhere in 1939–2025, with all coefficient prior
+SDs four times smaller, with them four times larger, and with AR(1) errors
+($\rho \sim \text{Uniform}(-1, 1)$).
+
+```{r sens-values}
+sv <- sens$sensitivity
+tight <- sv[sv$variant == "Priors 4x tighter", ]
+```
+
+Total warming stays at about 2 °C in every variant
+(`r f1(min(sv$total_warming))`–`r f1(max(sv$total_warming))` °C). The jump
+in the late mode is consistently
+`r f1(min(sv$jump_late))`–`r f1(max(sv$jump_late))` °C. The change-point
+window and AR(1) errors change essentially nothing. With a change point in
+the model, $\rho =$ `r with(sv[sv$variant == "AR(1) errors", ], paste(f2(rho), ci(rho_lower, rho_upper, f2)))`,
+which supports independent errors.
+
+**The relative weight of the two modes is *not* robust.** Under the 4×
+tighter priors, P(change after 1987) rises from `r f2(sv$p_late[1])` to
+`r f2(tight$p_late)`. Those priors restrict slopes to about ±0.25 °C per
+decade, which rules out the steep post-1960s warming (about 0.5 °C/decade)
+that the early mode needs. The 4× wider priors move it the other way, to
+`r f2(sv$p_late[sv$variant == "Priors 4x wider"])`. The data alone cannot
+decide between "a jump in 2007" and "a 1960s drop followed by fast warming".
+The choice hinges on how plausible a sustained 0.5 °C/decade warming rate
+is.
+
+For the linear model B1, AR(1) errors give
+$\rho =$ `r with(filter(sens$b1_ar_summary, quantity == "rho"), paste(f2(mean), ci(lower, upper, f2)))`
+and leave the warming rate essentially unchanged
+(`r with(filter(sens$b1_ar_summary, quantity == "trend_decade", errors == "AR(1)"), paste(f2(mean), ci(lower, upper, f2)))`
+°C/decade).
+
+**Posterior predictive checks.** For 4,000 replicated series from each
+model [@gabry2019visualization] we computed four statistics (Figure 7): the
+SD, the hottest summer, the lag-1 autocorrelation, and the 2008–2026 mean
+minus the earlier mean.
+B3 and B4 reproduce all four, with posterior predictive p-values between
+`r f2(min(ppl$p_value[ppl$model != "B1"]))` and
+`r f2(max(ppl$p_value[ppl$model != "B1"]))`. The linear model B1 reproduces
+the spread, the hottest summer and the persistence between summers (lag-1
+$p =$ `r f2(ppl$p_value[ppl$model == "B1" & grepl("Lag-1", ppl$stat)])`).
+It rarely produces a recent period as warm as the observed 2008–2026
+($p =$ `r f2(ppl$p_value[ppl$model == "B1" & grepl("Mean 2008", ppl$stat)])`).
+A straight line underestimates recent summers, which agrees with LOO. This
+statistic was chosen after seeing the data, so the result is descriptive.
+
+```{r fig-ppc, out.width="100%", fig.cap="**Figure 7.** Posterior predictive checks: distribution of each test statistic over 4,000 replicated data sets (grey) and the observed value (orange line)."}
+include_graphics(file.path(fig_dir, "bayes_ppc_stats.png"))
+```
+
+## 7. Alternative Analysis, Comparison, and Bayesian Justification
+
+**Conventional analysis.** We fitted the same six mean models (M0–M5) by
+maximum likelihood with generalized least squares [@pinheiro2000nlme], with
+iid or AR(1) errors. For change-point models the likelihood was profiled over
+candidate years, and models were compared with AICc. A change was tested with
+the Andrews sup-F test [@andrews1993tests; @zeileis2002strucchange] and a
+parametric bootstrap of the sup-likelihood-ratio statistic, needed because
+$\gamma$ does not exist under the null. The uncertainty in $\hat\gamma$ also
+came from a parametric bootstrap (B = `r conv$B`). Mann–Kendall with Sen's
+slope [@mann1945trend; @sen1968slope] gave a nonparametric cross-check.
+
+AICc selects M3 (jump, iid errors) with $\hat\gamma =$
+`r conv$best_cp$gamma`, i.e. a jump after the summer of
+`r conv$best_cp$gamma`. Its nearest competitors are M4 and M2, at
+`r f1(conv$comparison$dAICc[conv$comparison$model == "M4" & conv$comparison$errors == "iid"])`
+and
+`r f1(conv$comparison$dAICc[conv$comparison$model == "M2" & conv$comparison$errors == "iid"])`
+AICc units. "No change" is strongly rejected (sup-F
+$p =$ `r sprintf("%.4f", conv$supF$p.value)`; bootstrap
+$p <$ `r sprintf("%.3f", 1 / conv$B)`; Mann–Kendall
+$p =$ `r sprintf("%.4f", conv$nonparam$mk_p[1])`).
+
+```{r comparison-table}
+pred_conv <- {
+  m1 <- lm(y ~ s, data = annual)
+  m3 <- lm(y ~ s + I(year > conv$best_cp$gamma), data = annual)
+  new <- data.frame(s = 2027 - st$mid_year, year = 2027)
+  list(M1 = predict(m1, new, interval = "prediction"),
+       M3 = predict(m3, new, interval = "prediction"))
+}
+b <- bayes$pred_2027
+comp <- tribble(
+  ~Quantity, ~Conventional, ~Bayesian,
+  "Warming rate, linear trend (°C/decade)",
+    paste(f2(conv_m1$estimate), ci(conv_m1$lower, conv_m1$upper, f2), "[M1, AR(1)]"),
+    paste(pci("B1", "trend_decade", f = f2), "[B1]"),
+  "Change year γ (jump model)",
+    paste0(conv$best_cp$gamma, " (bootstrap ", conv$gamma_ci[1], ", ", conv$gamma_ci[3], ")"),
+    paste0("P(2000–2012) = ", f2(pp(5)), "; P(1952–1975) = ", f2(pp(6))),
+  "Jump size (°C)",
+    paste(f2(conv_m3$estimate[conv_m3$term == "step"]),
+          ci(conv_m3$lower[conv_m3$term == "step"], conv_m3$upper[conv_m3$term == "step"], f2),
+          "given γ = 2007"),
+    paste(pci("B3", "jump", "late", f2), "if late;", f2(ps("B3", "jump", "early")$mean), "if early"),
+  "Total warming 1938–2026 (°C)",
+    paste(f2(88 * conv_m1$estimate / 10), ci(88 * conv_m1$lower / 10, 88 * conv_m1$upper / 10, f2), "[M1]"),
+    paste(pci("B3", "total_warming", f = f2), "[B3]"),
+  "Preferred description",
+    paste0("M3 jump (AICc); M4 at +", f1(conv$comparison$dAICc[conv$comparison$model == "M4" & conv$comparison$errors == "iid"])),
+    "B2–B5 tied (LOO); stacking favours B4",
+  "Prediction for 2027 (°C)",
+    paste(f1(pred_conv$M3[1]), ci(pred_conv$M3[2], pred_conv$M3[3]), "[M3, γ fixed]"),
+    paste(f1(b$mean[b$model == "B3"]), ci(b$lower[b$model == "B3"], b$upper[b$model == "B3"]), "[B3]")
+)
+kable(comp, caption = "**Table 4.** Conventional versus Bayesian results. Intervals are 95% confidence/credible/prediction intervals.")
+```
+
+**Comparison.** The analyses agree on the main facts (Table 4). The warming
+rates are almost identical, both reject "no change", and conditional on a
+2007 change both find a jump of about 2 °C. The differences concern the
+change point:
+
+1. **Timing uncertainty.** Most of the bootstrap distribution of
+   $\hat\gamma$ sits on 2007 (Figure 5), but the posterior gives the
+   mid-1960s almost equal probability. The profile likelihood supports the
+   posterior: 1964 is only
+   `r f1(-max(conv$profiles$loglik[conv$profiles$model == "M3" & conv$profiles$errors == "iid" & conv$profiles$gamma == 1964] - max(conv$profiles$loglik[conv$profiles$model == "M3" & conv$profiles$errors == "iid"])))`
+   log-likelihood units below 2007. Resampling around the single best fit
+   understates this second mode.
+2. **Conditioning on $\hat\gamma$.** The conventional jump and prediction
+   intervals treat $\gamma = 2007$ as known. The Bayesian ones average over
+   $c$, so the jump is either about +2 °C or about −1.8 °C.
+3. **Model choice.** AICc rewards the sharp fit at 2007. LOO averages over
+   $c$ and finds an effective complexity of
+   $p_\text{loo} \approx$ `r f1(loo_w$p_loo[loo_w$model == "B3"])` for B3, far
+   above its 5 nominal parameters, so it does not prefer the jump. (In B3 and
+   B5 a few Pareto $\hat k$ values exceed 0.7, max
+   `r f2(max(loo_w$max_pareto_k))`, so those elpd values are less reliable.)
+
+**Why is the Bayesian approach justified here?** The scientific question is
+about the *uncertainty* in a change's timing and size. $\gamma$ is a
+discrete, non-regular parameter, so asymptotic intervals do not apply, and
+the bootstrap misses the second mode. The posterior gives direct
+probabilities, for example P(total warming > 1 °C) = `r f2(pp(4))`, and its
+predictions carry the timing uncertainty with them. It also exposes that
+the mode weights depend on the slope prior (Table 3). The advantage is
+limited, however. For the headline conclusion, about 2 °C of clearly
+non-zero warming, both approaches agree, and the conventional analysis is
+simpler. The Bayesian analysis mainly guards against overconfidence about
+*when* the change happened.
+
+## 8. Innovation or Extension
+
+*To be added.*
+
+## AI Use Statement
+
+*Draft (edit as needed):* We used Claude (Anthropic) to draft analysis code,
+debug the MCMC workflow and draft report text. We verified results by
+rerunning all scripts, checking MCMC output against an exact grid
+computation and the conventional analysis, and checking every reference.
 
 ## References
 
+<div id="refs"></div>
+
 ## Appendix: Full Analysis Code
+
+The analysis is run by four scripts, in order, and a file of helper
+functions. The report reads only their saved results.
+
+<details><summary>R/changepoint_tools.R (model equations, priors, grid posterior)</summary>
+```{r code-tools, file = here("R", "changepoint_tools.R"), eval = FALSE, echo = TRUE}
+```
+</details>
+
+<details><summary>scripts/00_data_cleaning_final.R</summary>
+```{r code-00, file = here("scripts", "00_data_cleaning_final.R"), eval = FALSE, echo = TRUE}
+```
+</details>
+
+<details><summary>scripts/01_conventional_analysis.R</summary>
+```{r code-01, file = here("scripts", "01_conventional_analysis.R"), eval = FALSE, echo = TRUE}
+```
+</details>
+
+<details><summary>scripts/02_bayesian_analysis.R</summary>
+```{r code-02, file = here("scripts", "02_bayesian_analysis.R"), eval = FALSE, echo = TRUE}
+```
+</details>
+
+<details><summary>scripts/03_bayesian_sensitivity.R</summary>
+```{r code-03, file = here("scripts", "03_bayesian_sensitivity.R"), eval = FALSE, echo = TRUE}
+```
+</details>

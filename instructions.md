@@ -88,6 +88,7 @@ Each group will have:
 • 8 minutes for presentation
 • 5 minutes for Q&A
 Use approximately 8–10 substantive slides, excluding the title and reference slides.
+
 A recommended organization is:
 1. Scientific Question and Data
 2. Bayesian Model

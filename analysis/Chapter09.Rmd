@@ -1,0 +1,993 @@
+---
+title: "<b>Chapter 9: Linear regression</b>"
+date: "2025-10-08"
+lang: en
+output: 
+  html_document:
+    mathjax: "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"
+---
+
+<!-- MathJax config for equation numbering -->
+<script>
+  window.MathJax = {
+    tex: {
+      tags: 'ams', // Enable automatic equation numbering
+      inlineMath: [['$', '$'], ['\\(', '\\)']],
+      displayMath: [['$$', '$$'], ['\\[', '\\]']],
+    },
+    options: {
+      renderActions: {
+        addMenu: []
+      }
+    }
+  };
+</script>
+
+<style>
+/* General code chunks and inline code */
+pre code, code, .r, .language-r {
+  background-color: white !important; /* white background */
+  color: black !important;            /* text is black */
+  font-weight: normal !important;
+  font-family: monospace !important;
+}
+
+/* Override all syntax highlighting classes added by R Markdown */
+code span, pre code span, .hljs, .hljs-keyword, .hljs-string,
+.hljs-number, .hljs-comment, .hljs-title, .hljs-function,
+.hljs-variable, .hljs-built_in, .hljs-literal {
+  color: black !important;
+  background: none !important;
+}
+
+/* Algorithm box */
+.algorithm {
+  border: 1px solid black;
+  padding: 12px;
+  margin: 10px 0;
+  font-family: monospace;
+  line-height: 1.5;
+  background: white;
+  color: black;
+}
+.algorithm .indent { margin-left: 20px; }
+.algorithm .double-indent { margin-left: 40px; }
+.algorithm b { font-weight: bold; color: black; }
+.algorithm i { font-style: italic; color: black; }
+
+/* Tables */
+table {
+  border-collapse: collapse;
+  width: 60%;
+  border-bottom: 2px solid black;
+}
+th, td {
+  padding: 8px;
+  text-align: center;
+  color: black;
+}
+th {
+  border-bottom: 2px solid black;
+  color: black;
+}
+</style>
+
+
+---
+
+
+### **The linear regression model**
+
+The linear regression model is used for finding linear association between a numeric outcome and explanatory variables. The explanatory variables could be predictor variables. The model can be 
+used for predicting the outcome when the explanatory variables are known. 
+Suppose we denote the outcome by $Y$ and $p$ explanatory variables by $X_1, \ldots, X_p$, then the model related $Y$ and $X_1, \ldots, X_p$ through 
+
+\[
+Y =  X_1\beta_1+\cdots+ X_p\beta_p + \epsilon = {\bf X}^\top  {\bf \beta}+ \epsilon,
+\]
+where 
+${\bf X}=(X_1, \cdots, X_p)^\top$, 
+${\bf \beta}=(\beta_1, \cdots, \beta_p)^\top$ is the (unknown) regression coefficients, and $\epsilon$ is a (random) error term.
+ The presence of the noise (also called the stochastic)  term makes the above expresssion (equation) different from a (deterministic) mathematical equation.
+
+
+Assuming $n$ observations, and the variables $(X_1, \cdots, X_p, Y)$ are indexed by $i$, for $i=1, \cdots, n$, then we have  
+\begin{align*}
+Y_1&= X_{1, 1}\beta_1+\cdots+ X_{1, p}\beta_p + \epsilon_1\\
+\vdots &\\
+Y_n&= X_{n, 1}\beta_1+\cdots+ X_{n, p}\beta_p + \epsilon_n,
+\end{align*}
+which can presented compactly as 
+$$
+{\bf Y}={\bf X}{\bf \beta}+{\bf \epsilon},
+$$
+with 
+${\bf Y} = (Y_1,\ldots,Y_n)^\top$ at ${\bf \epsilon}=(\epsilon_1, \ldots, \epsilon_n)^\top$, 
+and 
+\begin{align*}
+{\bf X}&=\left(\begin{array}{c} {\bf X^\top_1}\\
+\vdots\\
+{\bf X^\top_n}
+\end{array}\right). 
+\end{align*}
+Note that ${\bf Y}$ and ${\bf \epsilon}$ are $n\times 1$ vectors (column vectors), ${\bf X}$ is the $n\times p$ design matrix. We assume that ${\bf X}$ has full column rank, that means $\rho({\bf X})=p$ and the number of regression parameters must be smaller than the sample seize (i.e., $p<n$). Generally, we assume $\epsilon\stackrel{iid}{\sim}{\rm Normal}(0, \sigma^2)$, equivalently, 
+$$
+{\bf \epsilon} | \sigma^2 \sim N({\bf 0},\sigma^2 I),
+$$
+where $I$ denotes the identity matrix of order $n$. For simplicity, we assume that ${\bf X}$ is of full column rank $p$. Not only the distributional assumption, the above assumption implies $(X_1, \cdots, X_p)^\top$ and $\epsilon$ are independent. The dependence of $(X_1, \ldots, X_p)^\top$ and $\epsilon$ creates the problem of <i>endogeneity</i>.
+
+
+Our immediate goal is estimation of ${\bf \beta}$ and making inference about this parameter. 
+
+
+### **Frequentist inference**
+Maximum likelihood estimate (MLE) of ${\bf \beta}$ and $\sigma^2$ maximizes 
+\[
+p({\bf Y}|{\bf \beta},\sigma^2)  \propto (\sigma^2)^{-n/2} \exp\big\{-({\bf Y}-{\bf X}{\bf \beta})^\top ({\bf Y}-{\bf X}{\bf \beta})/(2\sigma^2)\big\}.
+\]
+
+The MLE of ${\bf \beta}$ is the least squares estimate, which minimizes the sum of squared residuals, $SSR({\bf \beta}) = ({\bf Y}-{\bf X}{\bf \beta})^\top ({\bf Y}-{\bf X}{\bf \beta})$:
+\[
+\widehat{\bf \beta}={\rm argmin}_{{\bf b}}\,SSR({\bf b}) = ({\bf X}^\top {\bf X})^{-1}{\bf X}^\top {\bf Y},
+\]
+with sampling distribution $\widehat{\bf \beta} \sim N_p({\bf \beta},\sigma^2({\bf X}^\top {\bf X})^{-1})$. The MLE of $\sigma^2$ is
+\begin{align*}
+\hat\sigma^2 &= n^{-1}({\bf Y}-{\bf X}\widehat{\bf \beta})^\top ({\bf Y}-{\bf X}\widehat{\bf \beta})= n^{-1}{\bf Y}^\top \big(I-{\bf X}({\bf X}^\top {\bf X})^{-1}{\bf X}^\top \big){\bf Y}= n^{-1}{\bf Y}^\top \left(I-H\right){\bf Y},
+\end{align*}
+where $H={\bf X}({\bf X}^{\top} {\bf X})^{-1}{\bf X}^\top$ is the so-called hat matrix. 
+It is symmetric and idempotent ($HH=H$). The MLE is also the least square estimator of the semiparametric model where the distributional assumption of $\epsilon$ is dropped, but only the two assumptions $E(\epsilon|X_1, \ldots, X_p)=0$ and ${\rm var}(\epsilon|X_1, \ldots, X_p)<\infty$ are used.  
+
+
+
+### **Bayesian linear regression**
+First we consider the semiconjugate priors for ${\bf \beta}$ and $\sigma^2$. Assuming ${\bf \beta} \sim N_p({\bf \beta}_0, \Sigma_0)$ and $\sigma^2 \sim IG(\nu_0/2,\nu_0\sigma^2_0/2)$ a priori, the posterior becomes   
+\begin{align*}
+\pi({\bf \beta},\sigma^2|{\rm data})  \propto &  \frac{1}{(\sigma^2)^{n/2}} \exp\left\{-\frac{({\bf Y}-{\bf X}{\bf \beta})^\top ({\bf Y}-{\bf X}{\bf \beta})}{2\sigma^2}\right\}\\
+      & \times  |\Sigma_0|^{-1/2} \exp\left\{-\frac{({\bf \beta}-   {\bf \beta}_0)^\top    \Sigma^{-1}_0({\bf \beta}-{\bf \beta}_0)}{2}\right\}\\
+      & \times \frac{1}{(\sigma^2)^{\nu_0/2+1}} \exp  \left(   -\frac{ \nu_0\sigma^2_0}{2\sigma^2}\right). 
+\end{align*}
+The FCD for ${\bf \beta}$ is  ${\bf \beta}| {\bf Y},\sigma^2 \sim N_p({\bf \beta}_n,\Sigma_n)$, where
+\begin{align*}
+\Sigma_n & = (\Sigma_0^{-1} + {\bf X}^\top{\bf X}/\sigma^2)^{-1}\\
+{\bf \beta}_n & = \Sigma_n(\Sigma_0^{-1}{\bf \beta}_0 + {\bf X}^\top{\bf Y}/\sigma^2).
+\end{align*}
+Note that if the prior precision $\Sigma_0^{-1} \rightarrow \mathbf{0}$, we have $\Sigma_n = \sigma^2({\bf X}^\top{\bf X})^{-1}$ and ${\bf \beta}_n = \sigma^2({\bf X}^\top{\bf X})^{-1}{\bf X}^\top{\bf Y}/\sigma^2 = \widehat{\bf \beta}$, and so ${\bf \beta} | {\bf Y},\sigma^2 \sim N_p(\widehat{\bf \beta},\sigma^2({\bf X}^\top{\bf X})^{-1})$. The FCD  for $\sigma^2$ is
+\begin{align*}
+\sigma^2| {\bf Y},{\bf \beta} & \sim IG\left[ \frac{\nu_0+n}{2},     \frac{\nu_0\sigma^2_0+SSR({\bf \beta})}{2} \right],
+\end{align*}
+where $SSR({\bf \beta})= ({\bf Y}-{\bf X}{\bf \beta})^\top ({\bf Y}-{\bf X}{\bf \beta})$. Note that 
+for $\nu_0 \rightarrow 0$, we have $\sigma^2| {\bf Y},{\bf \beta} \sim IG\big( n/2,SSR({\bf \beta})/2 \big)$, which is roughly centered at the MLE $\hat\sigma^2$ for ${\bf \beta} = \widehat{\bf \beta}$.
+
+
+Based on these FCDs, we can sample from the joint posterior of ${\bf \beta}, \sigma^2$ using a Gibbs sampler.
+
+### **The $g$ prior for ${\bf \beta}$**
+
+Assume 
+\[
+{\bf \beta}|\sigma^2 \sim N_p(\mathbf{0},g\sigma^2({\bf X}^\top{\bf X})^{-1}), \quad\mbox{ for some fixed } g>0.
+\]
+A common choice is $g=n$, which corresponds to the unit information prior. 
+
+Note that this distribution depends on the design matrix (a part of the data) but not on the observed response. Under the $g$-prior, the conditional posterior of ${\bf \beta}$ simplifies:
+\begin{align*}
+\Sigma_n & = \textstyle ({\bf X}^\top{\bf X}/(g\sigma^2) + {\bf X}^\top{\bf X}/\sigma^2)^{-1} = \frac{g}{g+1}\, \sigma^2({\bf X}^\top{\bf X})^{-1} \\
+{\bf \beta}_n & = \textstyle \frac{g}{g+1} \sigma^2({\bf X}^\top{\bf X})^{-1}( {\bf X}^\top{\bf Y}/\sigma^2) = \frac{g}{g+1}\,\widehat{\bf \beta},
+\end{align*}
+resulting in ${\bf \beta}| {\bf Y},\sigma^2 \sim N_p\big(\frac{g}{g+1}\,\widehat{\bf \beta},\frac{g}{g+1}\, \sigma^2({\bf X}^\top{\bf X})^{-1}\big)$. For small values of $g$, the regression coefficients are shrunk toward zero, which can prevent overfitting, and the prior becomes noninformative as $g\rightarrow \infty$. 
+Assuming $\sigma^2 \sim IG(\nu_0/2,\nu_0\sigma^2_0/2)$, the FCD for $\sigma^2$ is 
+\begin{align*}
+\pi(\sigma^2|{\bf \beta}, {\bf Y})& \propto \frac{1}{(\sigma^2)^{n/2}}\exp\biggl\{ 
+-\frac{SSR({\bf \beta})}{2\sigma^2}
+\biggl\}\\
+&\times \frac{1}{(\sigma^2)^{p/2}}\exp \biggl\{-\frac{1}{2g\sigma^2}{\bf \beta}^\top ({\bf X}^\top{\bf X}){\bf \beta}\biggl\}\\
+&\times \frac{1}{(\sigma^2)^{\nu_0/2+1}}\exp\left(-\frac{\nu_0\sigma^2_0}{2\sigma^2}\right),
+\end{align*}
+which is 
+$$IG\left(\frac{\nu_0+p+n}{2}, \frac{SSR({\bf \beta})+ g^{-1}\beta^\top({\bf X}^\top{\bf X})\beta+\nu_0\sigma^2_0 }{2}\right).$$ 
+
+## **The marginal posterior of $\sigma^2$ under the $g$ prior**
+
+Assuming the $g$ prior for ${\bf \beta}|\sigma^2$, we can integrate out ${\bf \beta}$:
+\[
+p({\bf Y}|\sigma^2) = \int p({\bf Y}|{\bf \beta},\sigma^2) p({\bf \beta}|\sigma^2) d{\bf \beta} \propto (\sigma^2)^{-n/2} \exp\big(-SSR_g/(2\sigma^2)\big),
+\]
+where $SSR_g= {\bf Y}^\top\big(I-\frac{g}{g+1}{\bf X}({\bf X}^\top{\bf X})^{-1}{\bf X}^\top\big){\bf Y}$  (see Peter Hoff's book p.~157--158).
+
+
+
+Combining this integrated likelihood with the prior $\sigma^2 \sim IG(\nu_0/2,\nu_0\sigma^2_0/2)$, we obtain the marginal posterior
+\[
+\sigma^2| {\bf Y} \sim IG\big( \frac{\nu_0+n}{2},\frac{\nu_0\sigma^2_0+SSR_g}{2} \big).
+\]
+Thus, under the $g$ prior, the joint posterior of $({\bf \beta}, \sigma^2)$ is a normal-inverse-gamma distribution, from which we can sample directly.
+
+
+
+### **Posterior sampling**
+
+<u>Option 1.</u>  Repeat the following steps of Gibbs sampling over many iterations. Conditional on the data sampled values  $(\beta, \sigma^2)$ are dependent over iterations.   
+
+Step 1. Sample $\sigma^2$ from $\pi(\sigma^2|\beta, {\rm data})$.
+
+Step 2. Sample $\beta$ from $\pi(\beta|\sigma^2, {\rm data})$.
+
+
+<u>Option 2.</u> Repeat the following steps over many iterations. Conditional on the data sampled values  $(\beta, \sigma^2)$ are independent over iterations.   
+
+Step 1. Sample $\sigma^2$ from $\pi(\sigma^2|{\rm data})$.
+
+Step 2. Sample $\beta$ from $\pi(\beta|\sigma^2, {\rm data})$.
+
+
+### **Example: Maximal oxygen uptake**
+The data in this example were simulated from a model reported in a 1994 article in <i>Research Quarterly for Exercise and Sport</i>. The study in that article involved 54 male runners. A kinesiologist wanted to know if maximal oxygen uptake could be predicted from easily
+measured explanatory variables. 
+
+The variables in the study were as follows:
+
+-  $y=$ maximal oxygen uptake (in liters per minute)
+-  $x_1=$ weight (in pounds)
+-  $x_2=$ age (in years)
+-  $x_3=$ time to walk 1 mile (in minutes)
+-  $x_4=$ heart rate at end of walk (in beats per minute)
+
+### **Simulated data**
+
+```{r}
+set.seed(123)  # for reproducibility
+
+n <- 54  # number of runners
+
+# Simulate predictors based on plausible ranges
+x1 <- rnorm(n, mean = 160, sd = 15)   # weight in pounds
+x2 <- rnorm(n, mean = 35, sd = 10)    # age in years
+x3 <- rnorm(n, mean = 15, sd = 2)     # time to walk 1 mile in minutes
+x4 <- rnorm(n, mean = 130, sd = 15)   # heart rate at end of walk in bpm
+
+# True regression coefficients (assumed for simulation)
+beta_0 <- 35.0
+beta_1 <- -0.01     # higher weight is associated with lower oxygen uptake (negative effect of weight)
+beta_2 <- -0.02     # older age reduces VO2 max
+beta_3 <- -0.2      # longer walk time = lower VO2
+beta_4 <- -0.04    # higher heart rate = lower VO2
+sigma <- 0.25       # standard deviation of residuals
+
+# Simulate response variable: maximal oxygen uptake (VO2 max)
+epsilon <- rnorm(n, mean = 0, sd = sigma)
+y <- beta_0 + beta_1 * x1 + beta_2 * x2 + beta_3 * x3 + beta_4 * x4 + epsilon
+
+# Combine into a data frame
+df <- data.frame(
+  VO2 = y,
+  weight = x1,
+  age = x2,
+  walk_time = x3,
+  heart_rate = x4
+)
+```
+
+### **Classical analysis**
+
+```{r}
+# View first few rows
+head(df)
+
+# Fit linear regression model
+model <- lm(VO2 ~ weight + age + walk_time + heart_rate, data = df)
+
+# Show model summary
+summary(model)
+```
+
+
+### **Bayesian analysis with independent priors**
+
+```{r}
+library(rstanarm)
+library(bayesplot)
+library(coda)
+
+# Fit a Bayesian linear regression model
+fit <- stan_glm(
+  VO2 ~ weight + age + walk_time + heart_rate, # formula
+  data = df,        # dataset
+  family = gaussian(), # for linear regression
+  prior = normal(0, 10),       # prior for coefficients
+  prior_intercept = normal(0, 10),  # prior for intercept
+  algorithm="sampling", 
+  chains = 4,          # number of MCMC chains
+  iter = 3000,         # total iterations per chain
+  seed = 123,
+  refresh = 0   # suppress printing of iterations
+)
+
+summary(fit)
+
+posterior_samples <- as.matrix(fit)   # matrix of all draws (iterations × parameters)
+
+# Convert to mcmc object
+mcmc_obj <- as.mcmc(posterior_samples)
+
+summary(mcmc_obj)
+```
+
+```{r fig.cap="Traceplots for the parameters"}
+traceplot(mcmc_obj)
+```
+
+
+```{r fig.cap="Aucorrelation plots for the parameters"}
+acfplot(mcmc_obj)
+```
+
+```{r}
+effectiveSize(mcmc_obj)
+```
+
+### **R-hat**
+
+The potential scale reduction factor, denoted by $\hat{R}$ (R-hat), is a convergence diagnostic
+proposed by Gelman and Rubin (1992) for assessing whether multiple Markov chains have converged
+to the same target posterior distribution. However, we are now presenting its improved version from the article, <i>Rank-Normalization, Folding, and Localization: An Improved $\hat{R}$ for Assessing Convergence of
+MCM</i> by Vehtari et al. It compares the <i>between-chain variance</i> to the
+<i>within-chain variance</i> of the sampled values for each parameter.
+
+Let there be $m$ parallel chains, each of length $N$. Denote by
+$\theta_{ij}$ the $i$th draw from the $j$th chain for the parameter vector $\theta$. Define the following quantities:
+\[
+\bar{\theta}_{\cdot j} = \frac{1}{N} \sum_{i=1}^N \theta_{ij}, \qquad
+\bar{\theta}_{\cdot \cdot} = \frac{1}{m} \sum_{j=1}^m \bar{\theta}_{\cdot j},
+\]
+\[
+B = \frac{N}{m-1} \sum_{j=1}^m (\bar{\theta}_{\cdot j} - \bar{\theta}_{\cdot \cdot})^2, \qquad
+W = \frac{1}{m} \sum_{j=1}^m \frac{1}{N-1} \sum_{i=1}^N (\theta_{ij} - \bar{\theta}_{\cdot j})^2,
+\]
+where $B$ is the between-chain variance and $W$ is the within-chain variance.
+
+The estimated marginal posterior variance of $\theta$ is given by
+\[
+\widehat{\mathrm{var}}^+(\theta) = \frac{N-1}{N} W + \frac{1}{N} B.
+\]
+Then the potential scale reduction factor is defined as
+\[
+\hat{R} = \sqrt{ \frac{ \widehat{\mathrm{var}}^+(\theta) }{ W } }= \sqrt{ \frac{N-1}{N}+ \frac{B}{NW}}.
+\]
+
+Values of $\hat{R}$ close to 1 indicate that the chains have mixed well and converged to the same
+distribution. In practice, $\hat{R} \leq 1.01$ is often taken as evidence of satisfactory convergence,
+while values substantially greater than 1 suggest that further sampling or model reparameterization
+may be required.
+
+
+
+
+
+
+```{r fig.cap="Plot of the posterior predictive distribution and the observed data"}
+# Posterior predictive checks
+pp_check(fit)  # bayesplot
+```
+
+
+```{r}
+# Prediction 
+# Predict on new data
+new_data <- data.frame(weight = c(150, 160),
+  age = c(46, 49),
+  walk_time = c(10, 20),
+  heart_rate = c(90, 130))
+out=posterior_predict(fit, newdata = new_data)
+mysummary1 <- apply(out, 2, function(x) {
+  c(median = median(x),
+    lower = quantile(x, 0.025),
+    upper = quantile(x, 0.975))
+})
+
+# transpose for nicer printing
+print(t(mysummary1))
+
+```
+
+
+### **Alternative code of analyzing the data**
+```{r}
+library(brms) # not the brm
+fit_brms=brms::brm(
+  formula = VO2 ~ weight + age + walk_time + heart_rate,
+  data = df,
+  family = gaussian(),
+  prior = c(
+    prior(normal(0, 10), class = "b"),
+    prior(normal(0, 10), class = "Intercept")
+  ),
+  chains = 4,
+  iter = 3000,
+  seed = 123, 
+  refresh=0 #to suppress the iterations
+)
+
+summary(fit_brms)
+```
+
+
+### **Code for analyzing data with the g-prior**
+```{r}
+# --- prepare data (replace y, x1,... with your vectors) --------------------
+df <- data.frame(
+  VO2 = y,
+  weight = x1,
+  age = x2,
+  walk_time = x3,
+  heart_rate = x4
+)
+
+# --- Center predictors (not the intercept) ----------------------------------
+Xc <- scale(df[, c("weight","age","walk_time","heart_rate")], center = TRUE, scale = FALSE)
+X <- cbind(1, Xc)         # n x p, first column intercept
+yvec <- as.numeric(df$VO2)
+
+n <- nrow(X)
+p <- ncol(X)              # p = 1 + (#slopes)
+
+# --- Precompute matrices ----------------------------------------------------
+XtX <- t(X) %*% X                 # p x p
+XtY <- t(X) %*% yvec              # p x 1
+
+# extract slope block Xc'Xc for building D
+XtX_slopes <- t(Xc) %*% Xc        # (p-1) x (p-1)
+
+# build D = diag(0, XtX_slopes) as p x p
+D <- matrix(0, nrow = p, ncol = p)
+D[2:p, 2:p] <- XtX_slopes
+
+# --- prior hyperparameters -------------------------------------------------
+g <- 100
+nu0 <- 10
+sigma0_sq <- 1
+
+# --- MCMC settings ---------------------------------------------------------
+niter <- 20000
+burn <- 5000
+store_beta <- matrix(NA, nrow = niter, ncol = p)
+store_sigma2 <- numeric(niter)
+
+# initial values
+sigma2 <- 1
+set.seed(123)
+
+# --- Gibbs sampler (conditionally conjugate, intercept unpenalized) -------
+for (it in 1:niter) {
+  # posterior precision matrix: (1/sigma2) * XtX + (1/(g*sigma2)) * D
+  # factor out 1/sigma2:
+  Precision_mat <- XtX + (1/g) * D          # p x p (note: sigma2 factor cancels below)
+  # posterior covariance for beta: sigma2 * solve(Precision_mat)
+  Sigma_beta <- sigma2 * solve(Precision_mat)
+  # posterior mean: Sigma_beta %*% (XtY) / sigma2  = solve(Precision_mat) %*% XtY
+  mu_beta <- solve(Precision_mat, XtY)
+  
+  # draw beta ~ N(mu_beta, Sigma_beta)
+  # Efficient draw: mu + chol(Sigma_beta) %*% rnorm(p)
+  Lbeta <- t(chol(Sigma_beta))
+  beta <- as.numeric(mu_beta + Lbeta %*% rnorm(p))
+  
+  # store
+  store_beta[it, ] <- beta
+  
+  # draw sigma2 | beta ~ Inv-Gamma((nu0 + n)/2, (nu0*sigma0_sq + SSR)/2)
+  SSR <- sum((yvec - X %*% beta)^2)
+  shape_sigma <- (nu0 + n+p-1) / 2
+  quad_prior <- as.numeric(t(beta) %*% D %*% beta) / g   # beta' D beta / g
+  rate_sigma  <- (nu0 * sigma0_sq + SSR+ quad_prior) / 2   # using rgamma with 'rate' parameter
+  sigma2 <- 1 / rgamma(1, shape = shape_sigma, rate = rate_sigma)
+  store_sigma2[it] <- sigma2
+}
+
+# --- posterior summaries ----------------------------------------------------
+post_beta <- store_beta[-(1:burn), , drop = FALSE]
+post_sigma2 <- store_sigma2[-(1:burn)]
+
+colnames(post_beta) <- c("Intercept", "weight", "age", "walk_time", "heart_rate")
+posterior_means <- apply(post_beta, 2, mean)
+credible_intervals <- t(apply(post_beta, 2, quantile, probs = c(0.025, 0.975)))
+
+print("Posterior means (slopes are on centered predictors scale):")
+print(round(posterior_means, 4))
+print("95% credible intervals:")
+print(round(credible_intervals, 4))
+print(paste("Posterior mean sigma^2:", round(mean(post_sigma2), 4)))
+
+
+```
+
+
+
+### **Model selection** 
+To this point we have not addressed the question of model selection. We have always assumed that we know the correct parametric model. Linear regression is a natural place to address model selection. Often investigators throw in ``all variables but the kitchen sink,'' and then go through a process of finding a best subset of variables. Bayesian methods provide a means of estimating a best subset, i.e., a best model, and to do model averaging. Let's first consider the general problem of model selection, and then apply what we learn to linear regression.
+
+
+
+Let $M_1,M_2,\ldots,M_N$ be the models under consideration. These might be of different dimensions, i.e., they might have different numbers of parameters. 
+
+- $\theta_k$: vector of parameters for model $M_k$
+- $p(\theta_k|M_k)$: prior for $\theta_k$ assuming that $M_k$ is the correct model
+- $P(M_k)$: prior probability of $M_k$
+- $p({\bf Y}|\theta_k,M_k)$: likelihood of the data assuming true model is $M_k$ and parameters are $\theta_k$
+- $p({\bf Y}|M_k)$: the marginal likelihood (probability) of observed data under the model $M_k$
+
+
+### **Posterior model probabilities**
+\[
+P(M_k|{\bf Y}) = \textstyle \frac{P(M_k) p({\bf Y}|M_k)}{\sum_{j=1}^N P(M_j) p({\bf Y}|M_j)} \propto P(M_k) p({\bf Y}|M_k),
+\]
+where the integrated likelihood is
+\[
+p({\bf Y}|M_k) = \int p({\bf Y}|\theta_k,M_k) p(\theta_k|M_k) d\theta_k.
+\]
+Let $\psi$ be a quantity of interest. We have two choices:
+<ul>
+<li> Use the model with the highest posterior probability: $p(\psi|{\bf Y},M_j)$ where the model index 
+$j ={\rm argmax}_{k=1,\ldots,N} P(M_k|{\bf Y})$ </li>
+
+<li>
+Carry out the Bayesian model averaging: 
+\[
+p(\psi|{\bf Y}) = \sum_{k=1}^N p(\psi,M_k|{\bf Y}) = \sum_{k=1}^N p(\psi|{\bf Y},M_k) P(M_k|{\bf Y})
+\]
+</li>
+</ul>
+For model selection/averaging, each prior $p(\theta_k|M_k)$ must be proper, because (arbitrary) constants in improper priors do not cancel out!
+
+
+### **Model selection for linear regression**
+
+To allow each regression coefficient some non-zero probability of being exactly zero, now assume that $\beta_j = Z_j b_j$, where $Z_j \in \{0,1\}$ and $b_j \in \mathbb{R}$, and so
+\[
+Y = \sum_{j=1}^p Z_j b_j X_j  + \epsilon.
+\]
+We have $Z_j=1$ if predictor $X_j$ is in the model and 0 otherwise. Thus, we can index each of the $2^p$ possible models by a vector ${\bf Z} =(Z_1,\ldots,Z_p)^\top$ of $0$s and $1$s. For a given model ${\bf Z}$, let ${\bf X}_z$ and ${\bf \beta}_z$ be the corresponding design matrix and vector of regression coefficients. For example, suppose ${\bf Z}=(1,0,1,0)$. Then, ${\bf \beta}_z=(\beta_1,\beta_3)^\top$, and
+${\bf X}_z$ is an $n \times 2$ matrix whose first and second columns contain $X_{1, 1},\ldots,X_{n, 1}$ and $X_{1,3},\ldots,X_{n, 3}$, respectively. Among the $2^p$ models, one model is where none of the predictors is included and the corresponding ${\bf Z}=(0, \cdots, 0)^\top$.  
+
+
+### **Integrated likelihood under the $g$ prior**
+
+Under a version of the $g$ prior, we can evaluate the integrated likelihood $p({\bf Y}|{\bf Z})$ in closed form for each possible model ${\bf Z}$. Assume ${\bf \beta}_z|\sigma^2,{\bf Z} \sim N(\mathbf{0},g\sigma^2({\bf X}_z^\top{\bf X}_z)^{-1})$ and 
+$\sigma^2 | {\bf Z} \sim IG(\nu_0/2,\nu_0\sigma^2_z/2)$.
+ Then,
+\begin{align*}
+p({\bf Y}|{\bf Z})  =& \int p({\bf Y}|{\bf \beta},\sigma^2,{\bf Z}) p({\bf \beta}|\sigma^2,{\bf Z}) p(\sigma^2|{\bf Z})    d{\bf \beta} d\sigma^2  \\
+%
+%
+\propto &  \int  \frac{1}{(\sigma^2)^{n/2}}  \exp \left\{-0.5 \frac{({\bf Y}- {\bf X}_z{\bf \beta}_z)^\top({\bf Y}- {\bf X}_z{\bf \beta}_z)}{\sigma^2}\right\} \\
+&\times 
+(2\pi)^{-dz/2}
+(g\sigma^2)^{-dz/2}|{\bf X}_z^\top{\bf X}_z|^{1/2}
+\exp\left\{-0.5 (g\sigma^2)^{-1}({\bf \beta}_z)^\top  ({\bf X}_z^\top{\bf X}_z)      {\bf \beta}z     \right\}   \\
+&\times    \frac{1}{\Gamma(\nu_0/2+1)}   \left(
+  \frac{\nu_0\sigma^2_z}{2} 
+  \right)^{\nu_0/2} \left(\frac{1}{\sigma^2} \right)^{\nu_0/2+1}         \exp \left(    -\frac{\nu_0\sigma^2_z}{2\sigma^2}  \right)   d{\bf \beta}_z d\sigma^2,
+\end{align*}
+where $dz$ is the length of the $\beta_z$ vector. 
+
+### **The marginal likelihood calculation continues**
+Let us consider the terms in the exponent of the first two lines:
+  \begin{align*}
+&-0.5 \frac{({\bf Y}- {\bf X}_z{\bf \beta}_z)^\top({\bf Y}- {\bf X}_z{\bf \beta}_z)}{\sigma^2}-  
+  \frac{0.5}{g\sigma^2}{\bf \beta}^\top_z  ({\bf X}_z^\top{\bf X}_z)      {\bf \beta}_z\\ 
+=&-\frac{0.5}{\sigma^2}{\bf Y}^\top {\bf Y} - \frac{0.5}{\sigma^2} \left(
+  {\bf \beta}^\top_z {\bf X}^\top_z{\bf X}_z {\bf \beta}_z- 2 {\bf \beta}^\top_z{\bf X}^\top_z{\bf Y}
+  \right)- 
+  \frac{0.5}{ g\sigma^2}{\bf \beta}^\top_z  ({\bf X}_z^\top{\bf X}_z)      {\bf \beta}_z \\
+=&     -\frac{0.5}{\sigma^2}{\bf Y}^\top {\bf Y} - \frac{0.5}{\sigma^2} \left\{
+  {\bf \beta}^\top_z   \left(\frac{g+1}{g}\right) 
+  {\bf X}^\top_z{\bf X}_z {\bf \beta}_z- 2 {\bf \beta}^\top_z{\bf X}^\top_z{\bf Y}
+  \right\}.
+\end{align*}   
+Let $$A=\left(\frac{g+1}{g} 
+              {\bf X}^\top_z{\bf X}_z\right).$$
+Then the above expression is 
+\begin{align*}
+& -\frac{0.5}{\sigma^2}{\bf Y}^\top {\bf Y} - \frac{0.5}{\sigma^2} \left(
+  {\bf \beta}^\top_z   A {\bf \beta}_z- 2 {\bf \beta}^\top_z{\bf X}^\top_z{\bf Y}
+  \right)\\ 
+=&   -\frac{0.5}{\sigma^2}{\bf Y}^\top {\bf Y} - 
+  \frac{0.5}{\sigma^2} 
+({\bf \beta}_z-       A^{-1}{\bf X}^\top_z{\bf Y})^\top 
+A({\bf \beta}_z- A^{-1} {\bf X}^\top_z{\bf Y})  
++ \frac{0.5}{\sigma^2} {\bf Y}^\top {\bf X}_z A^{-1}{\bf X}^\top_z{\bf Y}
+\\
+=& 
+-\frac{0.5}{\sigma^2}{\bf Y}^\top {\bf Y}
+  + \frac{0.5}{\sigma^2} {\bf Y}^\top {\bf X}_z A^{-1}{\bf X}^\top_z{\bf Y}
+\underbrace{ - 
+    \frac{0.5}{\sigma^2} 
+  ({\bf \beta}_z-       A^{-1}{\bf X}^\top_z{\bf Y})^\top 
+  A({\bf \beta}_z- A^{-1} {\bf X}^\top_z{\bf Y})}_{}.      
+\end{align*}   
+Let us now integrate the underbraced part part after placing it in the exponent, so 
+\begin{align*}
+  \int \exp \left\{   
+    - 
+      \frac{0.5}{\sigma^2} 
+    ({\bf \beta}_z-       A^{-1}{\bf X}^\top_z{\bf Y})^\top 
+    A({\bf \beta}_z- A^{-1} {\bf X}^\top_z{\bf Y})
+    \right\}d{\bf \beta}_z=& (2\pi\sigma^2)^{dz/2} |A^{-1}|^{1/2}\\
+  =& (2\pi \sigma^2)^{dz/2} |A|^{-1/2},
+  \end{align*}
+where $dz$ is the length of $\beta_z$. Since 
+$A={\bf X}^\top_z{\bf X}_z (g+1)/g$, $|A|=|{\bf X}^\top_z{\bf X}_z| \{  (g+1)/g \}^{dz}$ and 
+$|A|^{-1/2}=|{\bf X}^\top_z{\bf X}_z|^{-1/2} \{  (g+1)/g \}^{-dz/2}$.                 
+
+Now, 
+\begin{align*}
+p({\bf Y}|{\bf Z}) 
+=& \int \frac{1}{(\sigma^2)^{n/2}}\exp 
+\left(-\frac{0.5}{\sigma^2}{\bf Y}^\top {\bf Y}
++ \frac{0.5}{\sigma^2} {\bf Y}^\top {\bf X}_z A^{-1}{\bf X}^\top_z{\bf Y}
+                                              \right) \\
+&   \times  (2\pi \sigma^2)^{dz/2} |A|^{-1/2}
+\times  (2\pi)^{-dz/2}(g\sigma^2)^{-dz/2}|{\bf X}_z^\top{\bf X}_z|^{1/2}  \\
+&\times    \frac{1}{\Gamma(\nu_0/2+1)}   \left(
+  \frac{\nu_0\sigma^2_z}{2} 
+  \right)^{\nu_0/2} \left(\frac{1}{\sigma^2} \right)^{\nu_0/2+1}         \exp \left(    -\frac{\nu_0\sigma^2_z}{2\sigma^2}  \right)    d\sigma^2\\
+=&    \frac{1}{\Gamma(\nu_0/2+1)}   \left(
+  \frac{\nu_0\sigma^2_z}{2} 
+  \right)^{\nu_0/2} \int (2\pi \sigma^2  )^{dz/2}  |{\bf X}^\top_z{\bf X}_z|^{-1/2} \{  (g+1)/g \}^{-dz/2}
+(2\pi)^{-dz/2}\\
+&\times (g\sigma^2)^{-dz/2}|{\bf X}_z^\top{\bf X}_z|^{1/2}  \\
+&\times \frac{1}{(\sigma^2)^{n/2+\nu_0/2+1}} 
+\exp\left( -
+             \frac{\nu_0\sigma^2_z  
+               +{\bf Y}^\top {\bf Y}
+               -  {\bf Y}^\top {\bf X}_z A^{-1}{\bf X}^\top_z{\bf Y}}{2\sigma^2}    
+           \right)d\sigma^2.
+\end{align*}             
+              
+
+Now, 
+\begin{align*}
+p({\bf Y}|{\bf Z}) 
+=&    \frac{
+  \Gamma\{(n+\nu_0)/2\}
+}{\Gamma(\nu_0/2+1)}   \left(
+  \frac{\nu_0\sigma^2_z}{2} 
+  \right)^{\nu_0/2} 
+(g+1)^{-dz/2} \times 
+\left\{
+  \frac{2}{\nu_0\sigma^2_z  
+    +{\bf Y}^\top (I
+                  - {\bf X}_z A^{-1}{\bf X}^\top_z){\bf Y}}  
+  \right\}^{(n+\nu_0)/2}\\
+\propto&  
+  (g+1)^{-dz/2} 
+\frac{
+  (\nu_0\sigma^2_z
+  )^{\nu_0/2}   
+}{\{\nu_0\sigma^2_z  
+  +{\bf Y}^\top(I
+                - {\bf X}_z A^{-1}{\bf X}^\top_z){\bf Y}
+  \}^{(n+\nu_0)/2}}.\\     
+\end{align*}
+In the last expression, we have ignored the multiplicative terms without involving ${\bf Z}$.  Since $A={\bf X}^\top_z{\bf X}z (g+1)/g$,     
+\begin{align*}
+p({\bf Y}|{\bf Z})   \propto&  
+  (g+1)^{-dz/2} 
+\frac{
+  (\nu_0\sigma^2_z
+  )^{\nu_0/2}   
+}{[\nu_0\sigma^2_z  
+   +{\bf Y}^\top(I
+                 - \{g/(g+1)\}{\bf X}_z({\bf X}^\top_z{\bf X}_z)^{-1}{\bf X}^\top_z){\bf Y}
+]^{(n+\nu_0)/2}}.
+\end{align*} 
+
+### **Simulated example**
+Suppose that we have the following simulated data, with three features. 
+For the prior, use $\nu_0=1$ and $g=n$, and set $\sigma^2_z$ as the residual variance under a least-squares fit using ${\bf X}_z$. 
+We now compare the posterior model probabilities over the $2^3-1 = 7$ models (exclude the ${\bf Z}=(0, 0, 0)^\top$ model). 
+```{r}
+set.seed(1)
+n=20
+x1=rnorm(n)
+x2=0.5*x1+rnorm(n)
+x3=-0.5*x1+rnorm(n)
+y= 1+0.1*x1+0.6*x2-0.25*x3+rnorm(n);
+# centering the outcome and the predictors
+y=y-mean(y); 
+x1=x1-mean(x1);
+x2=x2-mean(x2);
+x3=x3-mean(x3);
+
+```
+
+We shall fit the linear model to centered $Y$ on centered predictor variables. Therefore, we omit the intercept term from the linear model. However, the slope parameters will still have the same interpretation as the original regression.   
+
+
+```{r}
+n=20
+g=n
+nu0=1
+pygvnz=rep(0, 7)
+
+
+# model (1, 0, 0)
+dz=1
+xz=cbind(x1)
+xztxz=t(xz)%*%xz
+out=lm(y~xz-1)
+sigma2z= summary(out)$sigma^2
+pygvnz[1]=exp( -(dz/2)*log(g+1)+ (nu0/2)*log(nu0*sigma2z)-
+                 ((n+nu0)/2)*log(nu0*sigma2z+ t(y)%*%y- 
+                                   (g/(g+1))*t(y)%*%xz%*%solve(xztxz)%*%t(xz)%*%y))
+
+# model (0, 1, 0)
+dz=1
+xz=cbind(x2)
+xztxz=t(xz)%*%xz
+out=lm(y~xz-1)
+sigma2z= summary(out)$sigma^2
+pygvnz[2]=exp( -(dz/2)*log(g+1)+ (nu0/2)*log(nu0*sigma2z)-
+                 ((n+nu0)/2)*log(nu0*sigma2z+ t(y)%*%y- 
+                                   (g/(g+1))*t(y)%*%xz%*%solve(xztxz)%*%t(xz)%*%y))
+
+
+# model (1, 1, 0)
+dz=2
+xz=cbind(x1, x2)
+xztxz=t(xz)%*%xz
+out=lm(y~xz-1)
+sigma2z= summary(out)$sigma^2
+pygvnz[3]=exp( -(dz/2)*log(g+1)+ (nu0/2)*log(nu0*sigma2z)-
+                 ((n+nu0)/2)*log(nu0*sigma2z+ t(y)%*%y- 
+                                   (g/(g+1))*t(y)%*%xz%*%solve(xztxz)%*%t(xz)%*%y))
+
+# model (0, 0, 1)
+dz=1
+xz=cbind(x3)
+xztxz=t(xz)%*%xz
+out=lm(y~xz-1)
+sigma2z= summary(out)$sigma^2
+pygvnz[4]=exp( -(dz/2)*log(g+1)+ (nu0/2)*log(nu0*sigma2z)-
+                 ((n+nu0)/2)*log(nu0*sigma2z+ t(y)%*%y- 
+                                   (g/(g+1))*t(y)%*%xz%*%solve(xztxz)%*%t(xz)%*%y))
+
+
+# model (1, 0, 1)
+dz=2
+xz=cbind(x1, x3)
+xztxz=t(xz)%*%xz
+out=lm(y~xz-1)
+sigma2z= summary(out)$sigma^2
+pygvnz[5]=exp( -(dz/2)*log(g+1)+ (nu0/2)*log(nu0*sigma2z)-
+                 ((n+nu0)/2)*log(nu0*sigma2z+ t(y)%*%y- 
+                                   (g/(g+1))*t(y)%*%xz%*%solve(xztxz)%*%t(xz)%*%y))
+
+# model (0, 1, 1)
+dz=2
+xz=cbind(x2, x3)
+xztxz=t(xz)%*%xz
+out=lm(y~xz-1)
+sigma2z= summary(out)$sigma^2
+pygvnz[6]=exp( -(dz/2)*log(g+1)+ (nu0/2)*log(nu0*sigma2z)-
+                 ((n+nu0)/2)*log(nu0*sigma2z+ t(y)%*%y- 
+                                   (g/(g+1))*t(y)%*%xz%*%solve(xztxz)%*%t(xz)%*%y))
+
+# model (1, 1, 1)
+dz=3
+xz=cbind(x1, x2, x3)
+xztxz=t(xz)%*%xz
+out=lm(y~xz-1)
+sigma2z= summary(out)$sigma^2
+pygvnz[7]=exp( -(dz/2)*log(g+1)+ (nu0/2)*log(nu0*sigma2z)-
+                 ((n+nu0)/2)*log(nu0*sigma2z+ t(y)%*%y- 
+                                   (g/(g+1))*t(y)%*%xz%*%solve(xztxz)%*%t(xz)%*%y))
+# posterior probability of each model   
+pygvnz/sum(pygvnz)
+```
+
+### **Posterior probability of the models for the simulated data**
+
+<table border="1" style="border-collapse: collapse; text-align: center;" aria-label="Posterior probabilities under different g values">
+  <caption><strong>Posterior probabilities under different values of g</strong></caption>
+  <thead style="background-color: #f2f2f2;">
+  <tr>
+  <th scope="col">Model</th>
+  <th scope="col">g = 5</th>
+  <th scope="col">g = n</th>
+  <th scope="col">g = 40</th>
+  </tr>
+  </thead>
+  <tbody>
+  <tr><th scope="row">(1, 0, 0)</th><td>0.016</td><td>0.012</td><td>0.012</td></tr>
+  <tr><th scope="row">(0, 1, 0)</th><td>0.451</td><td>0.620</td><td>0.697</td></tr>
+  <tr><th scope="row">(1, 1, 0)</th><td>0.192</td><td>0.142</td><td>0.115</td></tr>
+  <tr><th scope="row">(0, 0, 1)</th><td>0.015</td><td>0.011</td><td>0.011</td></tr>
+  <tr><th scope="row">(1, 0, 1)</th><td>0.007</td><td>0.003</td><td>0.002</td></tr>
+  <tr><th scope="row">(0, 1, 1)</th><td>0.223</td><td>0.173</td><td>0.141</td></tr>
+  <tr><th scope="row">(1, 1, 1)</th><td>0.093</td><td>0.038</td><td>0.022</td></tr>
+  </tbody>
+  </table>
+  
+  
+ 
+### **Posterior inclusion probability calculation**
+Suppose that we are interested in calculating $P(z_1=1|{\rm data})$. This can be calculated by summing the posterior probabilities of the models that include $z_1=1$. That means 
+\begin{align*}
+P(z_1=1|{\rm data})=& P( (1, 0, 0)|{\rm data})+ P( (1, 1, 0)|{\rm data})+
+  P( (1, 0, 1)|{\rm data})  +P( (1, 1, 1)|{\rm data}).
+\end{align*}
+For $g=n$, $P(z_1=1|{\rm data})=0.012+0.142+0.003+0.038=0.195$. Suppose that we are interested in calculating the posterior inclusion  probability of the second feature, then 
+for $g=n$, 
+\begin{align*}
+P(z_2=1|{\rm data})= & P( (0, 1, 0)|{\rm data})+ P( (1, 1, 0)|{\rm data})+
+  P( (0, 1, 1)|{\rm data})+P( (1, 1, 1)|{\rm data})\\
+  =&0.62+0.142+0.173+0.038\\
+  =&0.973.
+\end{align*} 
+
+### **The drawbacks of this method**
+<ul>
+<li> Although easy for the normal regression model, this approach is difficult to apply for other types of regression (e.g., GLM) because $p({\bf Y}|{\bf Z})$ has no closed form, so it is approximated. </li> 
+<li> Note that we are required to compute the marginal likelihood for  all 
+possible models, which is $2^p$ when the number of features is $p$. For a moderate value of $p$, say $20$, there are $2^p=1048576$ possible models; calculation of the marginal likelihood for such a   large number of models is nearly impossible. </li> 
+<li> For the large $p$ and small $n$ scenario, this is impossible to apply. </li> 
+<li> Sparsity assumption is not straight forward to incorporate in this setup. Sparsity implies that 
+only a handful of $p$ features is important, and the rest of the features have no relevance in the regression.   </li> 
+
+<li> The Gibbs sampling based computation will avoid evaluating all of $2^p$ models. However, for variable selection in the
+large $p$ and small $n$ scenario, we need a sparsity-inducing prior, not the g-prior.  </li> 
+</ul>
+
+
+
+### **Model averaging for large $p$ using Gibbs sampling**
+For large $p$, we cannot evaluate all $2^p$, but we can do (approximate) BMA using a Gibbs sampler.
+Consider the model in which the ${\bf Z}$ are the only unknowns, and ${\bf \beta}$ and $\sigma^2$ are integrated out. Then we sample each $z_j$ from its FCD:
+      \[
+        P(z_j = l |{\bf Y}, {\bf Z}_{-j}) \propto P(z_j =l | {\bf Z}_{-j}) \, p({\bf Y} | {\bf Z}_{-j}, z_j =l), \quad l=0,1.
+        \]
+We can update the $z_j$ in random order, and the MCMC will still converge to the posterior. Computation of $p({\bf Y} | {\bf Z}_{-j}, z_j =l)$ for a non linear regression model could be challenging.  
+
+Once we have obtained a (thinned) set of draws ${\bf Z}^{(1)},\ldots,{\bf Z}^{(K)}$, we can draw $\sigma^2{}^{(k)}$ and then ${\bf \beta}^{(k)}$ for each ${\bf Z}^{(k)}$ from the following  distributions:
+\begin{align*}
+\sigma^2{}^{(k)} & \sim IG\big( (\nu_0+n)/2,(\nu_0\sigma^2_{{\bf Z}^{(k)}}+SSR_g^{{\bf Z}^{(k)}})/2 \big) \\
+    {\bf \beta}^{(k)} & \sim N\big(\textstyle\frac{g}{g+1}\,\widehat{\bf \beta}_{{\bf Z}^{(k)}},\frac{g}{g+1}\, \sigma^2{}^{(k)}({\bf X}_{{\bf Z}^{(k)}}^\top {\bf X}_{{\bf Z}^{(k)}})^{-1}\big)
+\end{align*}
+Estimates or predictions based on these samples are (Bayesian) model averaged, as they involve draws of the parameters based on different models ${\bf Z}$. For a large $p$, some computational tricks need to be adopted to speed up the computation. So, we will not write our own code, rather use the `R` package `BMA`.
+
+
+
+### **Code for BMA**
+Let us apply the Gibbs sampling method to our simulated data. 
+
+```{r}
+library(BMA)
+xmat=cbind(x1, x2, x3)
+out2=bicreg(xmat, y)
+summary(out2)
+
+```
+
+The priors used in this calculation are implicit which results in 
+$\log \{P({\bf Y}|{\bf Z})\}\approx c-0.5 BIC_z$ and 
+$BIC_z= n\log(1-R^2_z)+ dz \log(n)$ \footnote{Eicher et al. Journal of Applied Econometrics, 26: 30--55 (2011).}, where $R^2_z$ is the $R^2$ value corresponding to the model $E({\bf Y}|{\bf X})={\bf X}_z{\bf \beta}_z$. 
+
+
+
+
+
+
+### **Alternative code using BAS (Bayesian adaptive sampling)**
+
+https://www.pnas.org/doi/pdf/10.1073/pnas.2120737119 In the following calculation g-prior is used with $g=n$ and for $\sigma^2$, the prior was 
+$\pi(\sigma^2)\propto 1/\sigma^2$ 
+
+```{r}
+library(BAS)
+out3 <- bas.lm(y ~x1+x2+x3,
+               method = "MCMC",
+               MCMC.iterations = 20000, prior = "g-prior",
+               modelprior = uniform(),
+               initprobs = "eplogp", pivot = FALSE)
+print(out3)
+```
+
+
+
+### **Example: Diabetes data from Hoff (9.3)**
+
+For 442 diabetes patients, the response $y$ consists of measurements of disease progression one year after baseline measurements. There are ten ``base'' covariates, but when including second-order terms $x_jx_k$, we have $p=64$ covariates, all standardized to mean zero and variance one. <i>relationship may be nonlinear</i>.
+
+  
+The 442 observations are divided into 342 training and 100 test samples.
+
+We run a Gibbs sampler for model selection and averaging, assuming the same priors as before (including a uniform prior over all $2^{64}$ models).
+ 
+
+### **Variable selection through the spike-and-slab prior**
+
+This technique is generally used for $p$ (the number of features) larger than $n$ (the sample size) scenario, but can be used for the $p<n$ scenario. Suppose that we have a numeric feature $Y$ and $p$ features denoted by $X_1, \dots, X_p$. Consider the following model 
+$$ Y= \beta_1X_1+\cdots+\beta_pX_p+\epsilon,$$
+ assume that $\epsilon\sim {\rm Normal}(0, \sigma^2)$. 
+ Here $\beta_1, \dots, \beta_p$ are the regression coefficients for the features and $\sigma$ is the noise variability. If the $k$th feature is not important, then  $\beta_k=0$, otherwise $\beta_k$ is non-zero. For variable selection problem, we want to know which regression coefficients are non-zero.  So, our Bayesian method proceeds by placing the spike-and-slab prior on $\beta_1, \dots, \beta_p$, which is 
+
+
+
+
+### **Variable selection through the spike-and-slab prior**
+\begin{align*}
+\beta_k &\stackrel{ind}{\sim} (1-Z_k){\rm Normal}(0, 0.001^2)+Z_k {\rm Normal}(0, \tau^2_k), \, \, k=1, \dots, p\\
+ Z_k&\stackrel{iid}{\sim} {\rm Bernoulli}(\omega), \, \, \, k=1, \dots, p
+ \end{align*}
+and 
+\begin{align*}
+\omega & \sim {\rm Beta}(a_1, a_2)\\
+\tau^2_k &\stackrel{iid}{\sim} {\rm IG}(b, {\rm scale}=b^{-1}) \\
+\sigma^2 & \sim  {\rm IG}\left(\frac{\nu_0}{2}, \frac{\nu_0\sigma^2_0}{2}\right),
+ \end{align*}
+with $a_1, a_2$, $b$, $\nu_0$ and $\sigma^2_0$ are being specified by practitioners.  
+ 
+
+
+
+### **Variable selection through the spike-and-slab prior**
+The prior on a regression parameter is a two-component mixture distribution. One component has its mass concentrated around zero, called the spike, and the other component, called the slab part, has wide range.  The latent indicator variable $Z$ denotes if the regression parameter is coming from the spike or slab part. This $Z$ assumed to follow a Bernoulli distribution with success probability $\omega$. If we believe that the model is sparse that means only a handful of features is important, then we can set the prior of $\omega$ to be concentrated on values close to zero. In the `BoomSpikeSlab` package, the default choice of $\nu_0=0$ resulting in the prior $\pi(\sigma^2)\propto 1/\sigma^2$. I believe, the package sets $\tau^2_k=\sigma^2$ for the default setting. The expected model size ($m$) is $p\times E_{prior}(\omega)=pa_1/(a_1+a_2)$. In the package, the default choice of $a_1$ is one and using the expected model size, $a_2$ is set to $(p-m)/m$.     
+	
+
+```{r}
+
+library(BoomSpikeSlab)
+
+set.seed(123)
+
+# Simulate data
+n <- 100
+p <- 50
+
+# True coefficients: only first 5 predictors are nonzero
+beta_true <- c(runif(5, -1, 1), rep(0, p - 5))
+
+# Predictor matrix
+X <- matrix(rnorm(n * p), nrow = n, ncol = p)
+colnames(X) <- paste0("X", 1:p)
+
+# Outcome with noise
+y <- X %*% beta_true + rnorm(n, sd = 1)
+
+model <- lm.spike(y ~ X-1, niter = 10000, expected.model.size = 20)
+
+sum_model <- summary(model)
+inclusion_probs <- sum_model$coefficients[, "inc.prob"]
+
+
+# Posterior inclusion probabilities
+inclusion_probs <- inclusion_probs
+
+# Get clean predictor names (remove "XX" or other prefixes)
+rownames_clean <- rownames(sum_model$coefficients)
+newpred <- gsub("X+", "", rownames_clean)  # removes "X" or "XX"
+
+# Convert to numeric (optional, for ordering)
+newpred <- as.numeric(newpred)
+
+# Sort for clarity
+ord <- order(newpred)
+newpred <- newpred[ord]
+inclusion_probs <- inclusion_probs[ord]
+```
+
+```{r fig.cap="Plot of the posterior inclusion probability"}
+# Plot
+plot(newpred, inclusion_probs, type = "b", pch = 19,
+     main = "Posterior Inclusion Probabilities",
+     xlab = "Predictor index", ylab = "P(included)")
+abline(h = 0.5, col = "red", lty = 2)
+
+```
+
+
+```{r fig.cap="The posterior distribution of the first component of the regression parameter vector"}
+hist(model$beta[-c(1:5000), 1], main="", xlab="Beta1", prob=T)
+
+```
+ 

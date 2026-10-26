@@ -52,18 +52,26 @@ bayesian-texas-temp-changepoints/
 │   ├── raw/
 │   │   └── dataset_raw.csv       # raw NOAA GHCN-D download, all variables, all years
 │   └── processed/
-│       └── data_cleaned.csv      # cleaned Jun-Aug daily TMAX, relevant columns only
+│       ├── data_cleaned.csv        # cleaned Jun-Aug daily TMAX (from 00_test_and_eda.R)
+│       └── data_cleaned_final.csv  # final cleaned data used by the analysis (from 00_data_cleaning_final.R)
 ├── R/
 │   ├── clean_data.R         # clean_summer_tmax(): raw -> cleaned daily TMAX
-│   └── annual_summary.R     # compute_annual_summer_tmax(): daily -> Y(t) with completeness rule
+│   ├── annual_summary.R     # compute_annual_summer_tmax(): daily -> Y(t) with completeness rule
+│   └── changepoint_tools.R  # Bayesian models B0-B5: mcp formulas/priors, exact grid posterior of the change point
 ├── scripts/
-│   └── 00_test_and_eda.R    # run this first: smoke tests + builds data_cleaned.csv + EDA
+│   ├── 00_test_and_eda.R          # smoke tests + builds data_cleaned.csv + EDA
+│   ├── 00_data_cleaning_final.R   # step-by-step cleaning -> data_cleaned_final.csv
+│   ├── 01_conventional_analysis.R # frequentist analysis (GLS, sup-F, bootstrap) -> analysis/results/
+│   ├── 02_bayesian_analysis.R     # Bayesian analysis with mcp -> analysis/results/
+│   └── 03_bayesian_sensitivity.R  # prior/AR(1) sensitivity + posterior predictive checks
 ├── tests/
 │   ├── testthat.R           # test runner entry point
 │   └── testthat/
 │       └── test-clean_data.R
 ├── analysis/
-│   ├── report.Rmd           # written report skeleton (8 required sections, word-count targets)
+│   ├── report.Rmd           # written report (reads analysis/results/, cites references.bib)
+│   ├── references.bib       # bibliography for the report
+│   ├── results/             # saved results and figures from scripts 01-03
 │   └── presentation.Rmd     # final slide deck for the live presentation
 ├── instructions.md          # assignment instructions, unmodified
 └── README.md
@@ -146,15 +154,33 @@ or, to also re-source `R/` first exactly as the CI/grader would:
 source("tests/testthat.R")
 ```
 
+## Running the analysis
+
+The Bayesian models are fitted with the `mcp` package, which needs **JAGS
+4.3.x** installed on your computer, outside R. Get it from
+https://sourceforge.net/projects/mcmc-jags/files/JAGS/4.x/ (Windows: run
+`JAGS-4.3.2.exe` with the default settings). JAGS 5.x does **not** work with the
+current `rjags` package from CRAN. Check the install with
+`library(rjags)`, which should print `Linked to JAGS 4.3.x`.
+
+Run the scripts in order from the project root. Each one saves its results to
+`analysis/results/` for the next one and for the report:
+```
+Rscript scripts/00_data_cleaning_final.R    # ~seconds
+Rscript scripts/01_conventional_analysis.R  # ~minutes (bootstrap)
+Rscript scripts/02_bayesian_analysis.R      # ~10 minutes (MCMC)
+Rscript scripts/03_bayesian_sensitivity.R   # ~10 minutes (MCMC)
+```
+
 ## Rendering the report and presentation
 
 ```r
 rmarkdown::render("analysis/report.Rmd")        # written report -> analysis/report.html
 rmarkdown::render("analysis/presentation.Rmd")  # slides -> analysis/presentation.html
 ```
-Both Rmds read `data/processed/data_cleaned.csv`, so run
-`scripts/00_test_and_eda.R` at least once first (or after any change to the
-raw data or cleaning logic).
+The report reads the saved results in `analysis/results/`, so run scripts
+00-03 first (see "Running the analysis"). The presentation (not yet updated)
+still reads `data/processed/data_cleaned.csv` from `scripts/00_test_and_eda.R`.
 
 ## Modeling task
 Develop and justify an appropriate Bayesian time-series/change-point
