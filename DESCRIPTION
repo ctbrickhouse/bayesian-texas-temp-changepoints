@@ -34,6 +34,7 @@ Suggests:
     brms,
     rstan,
     bayesplot,
+    coda,
     loo,
     posterior,
     patchwork,

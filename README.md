@@ -63,7 +63,8 @@ bayesian-texas-temp-changepoints/
 │   ├── 00_data_cleaning_final.R   # step-by-step cleaning -> data_cleaned_final.csv
 │   ├── 01_conventional_analysis.R # frequentist analysis (GLS, sup-F, bootstrap) -> analysis/results/
 │   ├── 02_bayesian_analysis.R     # Bayesian analysis with mcp -> analysis/results/
-│   └── 03_bayesian_sensitivity.R  # prior/AR(1) sensitivity + posterior predictive checks
+│   ├── 03_bayesian_sensitivity.R  # prior/AR(1) sensitivity + posterior predictive checks
+│   └── 04_gibbs_check_B3.R        # hand-written Gibbs sampler for B3 (Section 8) -> analysis/results/
 ├── tests/
 │   ├── testthat.R           # test runner entry point
 │   └── testthat/
@@ -170,6 +171,7 @@ Rscript scripts/00_data_cleaning_final.R    # ~seconds
 Rscript scripts/01_conventional_analysis.R  # ~minutes (bootstrap)
 Rscript scripts/02_bayesian_analysis.R      # ~10 minutes (MCMC)
 Rscript scripts/03_bayesian_sensitivity.R   # ~10 minutes (MCMC)
+Rscript scripts/04_gibbs_check_B3.R         # ~2 minutes (Gibbs sampler)
 ```
 
 ## Rendering the report and presentation

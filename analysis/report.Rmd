@@ -23,6 +23,7 @@ analysis/results/. Run them in order before rendering:
   scripts/01_conventional_analysis.R  -> analysis/results/conventional_results.rds
   scripts/02_bayesian_analysis.R      -> analysis/results/bayesian_results.rds
   scripts/03_bayesian_sensitivity.R   -> analysis/results/bayesian_sensitivity.rds
+  scripts/04_gibbs_check_B3.R         -> analysis/results/gibbs_check.rds
 -->
 
 ```{r setup, include=FALSE}
@@ -38,6 +39,7 @@ fig_dir <- file.path(res_dir, "figures")
 conv  <- readRDS(file.path(res_dir, "conventional_results.rds"))
 bayes <- readRDS(file.path(res_dir, "bayesian_results.rds"))
 sens  <- readRDS(file.path(res_dir, "bayesian_sensitivity.rds"))
+gib   <- readRDS(file.path(res_dir, "gibbs_check.rds"))
 
 annual <- conv$annual
 st <- bayes$settings
@@ -483,7 +485,46 @@ simpler. The Bayesian analysis mainly guards against overconfidence about
 
 ## 8. Innovation or Extension
 
-*To be added.*
+```{r gibbs-values}
+# numbers for Section 8, from scripts/04_gibbs_check_B3.R
+g_mean  <- gib$fits[["mean-only"]]$draws
+g_slope <- gib$fits$slope$draws
+g_jump  <- function(d) d[, "int_2"] - (d[, "int_1"] + d[, "s_1"] * (d[, "k"] - 1982))
+g_ci    <- function(x) paste0(f1(mean(x)), " ", ci(quantile(x, 0.025), quantile(x, 0.975)))
+g_early <- g_slope[, "k"] < 1987
+g_rhat  <- coda::gelman.diag(coda::mcmc.list(
+  lapply(gib$fits$slope$chains, function(ch) coda::mcmc(ch[, "k"]))))$psrf[1]
+g_exact <- sum(gib$exact$prob[gib$exact$gamma + 1 < 1987])
+```
+
+**Our own Gibbs sampler.** Section 4 relied on mcp and JAGS, which do the
+sampling behind the scenes. To check that the two modes come from the posterior and
+not from the software, we wrote a Gibbs sampler for B3 by hand, with the
+same priors (Appendix, `04_gibbs_check_B3.R`). Each iteration draws
+$\alpha$, $\alpha_2$ and $\beta$ from their normal full conditionals,
+$\sigma$ with a random-walk Metropolis step, and the change year from its
+discrete full conditional over every allowed year. We ran four chains of
+10,000 iterations started at 1955, 1970, 2000 and 2010, and fitted B3 both
+with and without the slope $\beta$.
+
+Without the slope, every draw puts the change in the 2000s, with a jump of
+`r g_ci(g_jump(g_mean))` °C. With the slope, the sampler finds both modes of
+Section 5 with nearly the same estimates: a drop of
+`r g_ci(-g_jump(g_slope)[g_early])` °C in the 1960s followed by warming of
+`r f2(10 * mean(g_slope[g_early, "s_1"]))` °C per decade, or a jump of
+`r g_ci(g_jump(g_slope)[!g_early])` °C in 2007 on a nearly flat trend. The
+1960s explanation exists only because the model includes a trend.
+
+The sampler does not weight the two modes correctly, however. Its chains
+rarely cross between them ($\widehat R$ for the change year is
+`r f2(g_rhat)`), so it estimates P(change before 1987) as `r f2(mean(g_early))`,
+while the exact grid gives `r f2(g_exact)` (Figure 8). So even a simple
+Gibbs sampler gets stuck, just like JAGS did, and that is why we needed the
+grid weighting in Section 4.
+
+```{r fig-gibbs, out.width="85%", fig.cap="**Figure 8.** Posterior probability of each change year from our Gibbs sampler for B3 without the slope (top) and with it (bottom, grey bars), compared with the exact grid posterior (orange points)."}
+include_graphics(file.path(fig_dir, "gibbs_check.png"))
+```
 
 ## AI Use Statement
 
@@ -498,7 +539,7 @@ computation and the conventional analysis, and checking every reference.
 
 ## Appendix: Full Analysis Code
 
-The analysis is run by four scripts, in order, and a file of helper
+The analysis is run by five scripts, in order, and a file of helper
 functions. The report reads only their saved results.
 
 <details><summary>R/changepoint_tools.R (model equations, priors, grid posterior)</summary>
@@ -523,5 +564,10 @@ functions. The report reads only their saved results.
 
 <details><summary>scripts/03_bayesian_sensitivity.R</summary>
 ```{r code-03, file = here("scripts", "03_bayesian_sensitivity.R"), eval = FALSE, echo = TRUE}
+```
+</details>
+
+<details><summary>scripts/04_gibbs_check_B3.R (Section 8)</summary>
+```{r code-04, file = here("scripts", "04_gibbs_check_B3.R"), eval = FALSE, echo = TRUE}
 ```
 </details>
